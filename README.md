@@ -35,7 +35,16 @@ cp .env.example .env
 # Edit .env with your API keys and database URLs
 
 # 4. Run development server
+# Linux/Mac (recommended)
 npm run dev
+
+# Windows
+npm run dev:windows
+
+# Or set port directly
+PORT=3000 npm run dev
+
+# Note: cross-env is used for cross-platform environment variable support
 ```
 
 ### Project Structure
@@ -56,22 +65,19 @@ trendyummy/
 ├── TECHSPEC.md              # Technical Specification
 ├── package.json
 ├── tsconfig.json
-├── tailwind.config.ts
-├── next.config.ts
-└── postcss.config.js
+├── next.config.mjs        # Note: Next.js 14.2.35 requires .mjs format
+├── postcss.config.js
+└── .env                     # Environment variables
 ```
 
 ## Available Scripts
 
 ```bash
 # Development
-npm run dev          # Start development server on http://localhost:3000
-
-# Build
+npm run dev          # Start development server (Linux/Mac)
+npm run dev:windows  # Start development server (Windows)
 npm run build        # Build for production
-
-# Production
-npm start          # Start production server
+npm start            # Start production server
 
 # Testing
 npm run test         # Run all tests

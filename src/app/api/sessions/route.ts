@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { julesApi, type Session } from '@/lib/api/jules-client';
+import { NextRequest, NextResponse } from "next/server";
+import { julesApi } from "@/lib/api/jules-client";
 
 /**
  * GET /api/sessions - List all Jules sessions
@@ -7,8 +7,8 @@ import { julesApi, type Session } from '@/lib/api/jules-client';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const pageSize = Number(searchParams.get('pageSize') || '30');
-    const pageToken = searchParams.get('pageToken') || undefined;
+    const pageSize = Number(searchParams.get("pageSize") || "30");
+    const pageToken = searchParams.get("pageToken") || undefined;
 
     const result = await julesApi.listSessions({
       pageSize,
@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
       nextPageToken: result.nextPageToken,
     });
   } catch (error) {
-    console.error('Failed to list sessions:', error);
+    console.error("Failed to list sessions:", error);
     return NextResponse.json(
-      { error: 'Failed to list sessions', message: String(error) },
-      { status: 500 }
+      { error: "Failed to list sessions", message: String(error) },
+      { status: 500 },
     );
   }
 }
@@ -40,15 +40,15 @@ export async function POST(request: NextRequest) {
       title: body.title,
       sourceContext: body.sourceContext,
       requirePlanApproval: body.requirePlanApproval ?? false,
-      automationMode: body.automationMode ?? 'AUTO_CREATE_PR',
+      automationMode: body.automationMode ?? "AUTO_CREATE_PR",
     });
 
     return NextResponse.json(session, { status: 201 });
   } catch (error) {
-    console.error('Failed to create session:', error);
+    console.error("Failed to create session:", error);
     return NextResponse.json(
-      { error: 'Failed to create session', message: String(error) },
-      { status: 500 }
+      { error: "Failed to create session", message: String(error) },
+      { status: 500 },
     );
   }
 }

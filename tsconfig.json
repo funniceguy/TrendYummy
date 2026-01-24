@@ -14,6 +14,7 @@
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
     "isolatedModules": true,
+    // Linting options
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
@@ -21,13 +22,11 @@
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
     "resolvePackageJsonExports": true,
-
     // Path aliases
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
-
     // Strict mode - no any types
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -36,13 +35,7 @@
     "strictPropertyInitialization": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-
-    // Linting options
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-
     // Next.js specific
     "plugins": [
       {
@@ -50,16 +43,16 @@
       }
     ]
   },
-  "include": [
-    "src/**/*",
-    "**/*.ts",
-    "**/*.tsx"
-  ],
+  "include": ["src/**/*", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": [
     "node_modules",
     ".next",
     "out",
     "dist",
-    "build"
+    "build",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
   ]
 }

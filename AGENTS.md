@@ -1501,14 +1501,39 @@ Each internal agent has a specific role:
 
 ### 11.1 API Key Management
 
+**⚠️ API 키 발급 방법**:
+
+사용자가 Jules API 키를 발급받아야 하는 경우:
+1. Jules 웹 콘솔(https://jules.google.com) 방문
+2. Settings 페이지 접근
+3. API Keys 섹션에서 새 API 키 생성
+
+**개발자 설정**:
+개발자는 `.env` 파일에 직접 Jules API 키를 입력하여 사용합니다.
+
 ```bash
-# .env.example
-JULES_API_KEY=your_jules_api_key_here
-NANOBANANA_API_KEY=your_nanobanana_api_key_here
+# .env 파일 예시
+JULES_API_KEY=jules_api_key_here
+JULES_AUTH_TOKEN=jules_auth_token_here
+
+# Supabase Configuration
 SUPABASE_URL=your_supabase_url_here
 SUPABASE_ANON_KEY=your_supabase_anon_key_here
-REDIS_URL=your_redis_url_here
-SLACK_WEBHOOK_URL=your_slack_webhook_url_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+
+# Redis Configuration
+REDIS_URL=redis://localhost:6379
+REDIS_PASSWORD=your_redis_password_here
+
+# Nanobanana API Configuration
+NANOBANANA_API_KEY=your_nanobanana_api_key_here
+
+# Slack Webhook (Optional)
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# Next.js Configuration
+PORT=3000
+NODE_ENV=development
 ```
 
 ### 11.2 Security Guidelines
