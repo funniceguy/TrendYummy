@@ -22,9 +22,12 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "ioredis": "^5.4.0",
+    "lucide-react": "^0.574.0",
+    "mermaid": "^11.12.3",
     "next": "^14.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "tailwind-merge": "^3.4.1",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
