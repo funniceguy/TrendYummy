@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 
+const outfit = Outfit({ subsets: ["latin"] });
+
 export const metadata: Metadata = {
-  title: "TrendYummy - AI 콘텐츠 생성 대시보드",
-  description: "실시간 트렌드 기반 인터랙티브 웹 콘텐츠 자동 생성 시스템",
+  title: "TrendYummy - AI Trend Analysis",
+  description: "Real-time trend analysis and content generation dashboard",
 };
 
 export default function RootLayout({
@@ -12,9 +15,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ko">
-      <body className="antialiased">
-        <div className="min-h-screen bg-background text-foreground">
+    <html lang="ko" className="dark">
+      <body className={`${outfit.className} antialiased selection:bg-neon-cyan/30 selection:text-neon-cyan`}>
+        <div className="min-h-screen bg-transparent text-foreground">
           {children}
         </div>
       </body>
