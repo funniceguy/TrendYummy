@@ -125,8 +125,10 @@ export async function GET(
     // Fallback: 데이터가 하나도 없으면 모의 데이터 사용 및 에러 정보 포함
     if (allTrends.length === 0) {
       console.warn("No trends found, using mock data. Errors:", errors);
+      // Front-end requires success: true to display data. 
+      // We return success: true but include error field for debugging.
       return NextResponse.json({
-        success: false,
+        success: true,
         trends: MOCK_TRENDS,
         crawledAt: new Date().toISOString(),
         sources: ["시스템 알림(데이터 수집 실패)"],
@@ -167,9 +169,10 @@ export async function GET(
     });
   } catch (error) {
     console.error("Trend crawling fatal error:", error);
+    // Fatal error but we still want to show mock data on frontend
     return NextResponse.json(
       {
-        success: false,
+        success: true,
         error: error instanceof Error ? error.message : "트렌드 수집 치명적 오류",
         trends: MOCK_TRENDS,
         crawledAt: new Date().toISOString(),
@@ -181,7 +184,7 @@ export async function GET(
         },
         categories: CATEGORIES,
       },
-      { status: 500 },
+      { status: 200 },
     );
   }
 }
