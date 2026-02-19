@@ -38,9 +38,12 @@ const CATEGORIES = [
 
 const FETCH_HEADERS = {
   "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+  "Upgrade-Insecure-Requests": "1",
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -54,23 +57,46 @@ const SBS_SECTIONS: Record<string, { sectionId: string; source: string }> = {
   정치: { sectionId: "01", source: "SBS 정치" },
 };
 
+import { MOCK_TRENDS } from "./mockData";
+
 export async function GET(
   request: Request,
 ): Promise<NextResponse<TrendResponse>> {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category") || "전체";
+  const errors: string[] = [];
 
   try {
     // 모든 크롤러 병렬 실행
     const sbsPromises = Object.entries(SBS_SECTIONS).map(([cat, info]) =>
-      crawlSbsRss(cat, info.sectionId, info.source),
+      crawlSbsRss(cat, info.sectionId, info.source).catch((e) => {
+        const msg = `[SBS ${cat}] Failed: ${e.message}`;
+        console.error(msg);
+        errors.push(msg);
+        return [];
+      }),
     );
 
     const [sbsResults, itItems, gameItems, googleTrends] = await Promise.all([
       Promise.all(sbsPromises),
-      crawlAITimesRSS(),
-      crawlGameNews(),
-      fetchGoogleTrendsKR(),
+      crawlAITimesRSS().catch((e) => {
+        const msg = `[AI타임스] Failed: ${e.message}`;
+        console.error(msg);
+        errors.push(msg);
+        return [];
+      }),
+      crawlGameNews().catch((e) => {
+        const msg = `[게임] Failed: ${e.message}`;
+        console.error(msg);
+        errors.push(msg);
+        return [];
+      }),
+      fetchGoogleTrendsKR().catch((e) => {
+        const msg = `[Google] Failed: ${e.message}`;
+        console.error(msg);
+        errors.push(msg);
+        return [];
+      }),
     ]);
 
     // 모든 결과 병합
@@ -96,6 +122,24 @@ export async function GET(
     }
     if (etcTrends.length > 0) successSources.push("구글 트렌드");
 
+    // Fallback: 데이터가 하나도 없으면 모의 데이터 사용 및 에러 정보 포함
+    if (allTrends.length === 0) {
+      console.warn("No trends found, using mock data. Errors:", errors);
+      return NextResponse.json({
+        success: false,
+        trends: MOCK_TRENDS,
+        crawledAt: new Date().toISOString(),
+        sources: ["시스템 알림(데이터 수집 실패)"],
+        filter: {
+          country: "대한민국",
+          timeRange: "실시간",
+          category: category,
+        },
+        categories: CATEGORIES,
+        error: `All sources failed. Errors: ${errors.join(", ")}`,
+      });
+    }
+
     // 카테고리 필터링
     let filteredTrends = allTrends;
     if (category !== "전체") {
@@ -119,16 +163,17 @@ export async function GET(
         category: category,
       },
       categories: CATEGORIES,
+      error: errors.length > 0 ? `Partial failures: ${errors.join(", ")}` : undefined,
     });
   } catch (error) {
-    console.error("Trend crawling error:", error);
+    console.error("Trend crawling fatal error:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "트렌드 수집 실패",
-        trends: [],
+        error: error instanceof Error ? error.message : "트렌드 수집 치명적 오류",
+        trends: MOCK_TRENDS,
         crawledAt: new Date().toISOString(),
-        sources: [],
+        sources: ["시스템 알림(오류 발생)"],
         filter: {
           country: "대한민국",
           timeRange: "실시간",
@@ -148,13 +193,19 @@ export async function GET(
 async function safeFetch(
   url: string,
   timeoutMs: number = 8000,
+  referer?: string,
 ): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const headers = { ...FETCH_HEADERS };
+    if (referer) {
+      (headers as any)["Referer"] = referer;
+    }
+
     const response = await fetch(url, {
-      headers: FETCH_HEADERS,
+      headers,
       cache: "no-store",
       signal: controller.signal,
     });
@@ -178,7 +229,7 @@ async function crawlSbsRss(
 ): Promise<TrendItem[]> {
   try {
     const url = `https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=${sectionId}`;
-    const xml = await safeFetch(url, 5000);
+    const xml = await safeFetch(url, 5000, "https://news.sbs.co.kr/");
     return parseRssItems(xml, category, sourceName, 5);
   } catch (error) {
     console.error(`[${category}] SBS RSS 실패:`, error);
@@ -246,7 +297,7 @@ async function crawlGameNews(): Promise<TrendItem[]> {
 
 async function crawlGamemeca(): Promise<TrendItem[]> {
   try {
-    const html = await safeFetch("https://www.gamemeca.com/", 8000);
+    const html = await safeFetch("https://www.gamemeca.com/", 8000, "https://www.gamemeca.com/");
     const items: TrendItem[] = [];
     const seen = new Set<string>();
 
@@ -283,7 +334,7 @@ async function crawlGamemeca(): Promise<TrendItem[]> {
 
 async function crawlInven(): Promise<TrendItem[]> {
   try {
-    const html = await safeFetch("https://www.inven.co.kr/", 8000);
+    const html = await safeFetch("https://www.inven.co.kr/", 8000, "https://www.inven.co.kr/");
     const items: TrendItem[] = [];
     const seen = new Set<string>();
 
