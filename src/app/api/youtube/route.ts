@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 30;
+
 interface YouTubeVideo {
   id: string;
   videoId: string;

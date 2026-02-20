@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 30;
+
 interface TrendItem {
   rank: number;
   keyword: string;
@@ -48,10 +53,11 @@ const FETCH_HEADERS = {
 
 // ═══════════════════════════════════════════════════════════════
 // SBS 뉴스 RSS 섹션 ID (연예, 스포츠, 경제, 사회, 정치)
+// 2026-02 기준: 연예=14(방송/연예), 스포츠=09
 // ═══════════════════════════════════════════════════════════════
 const SBS_SECTIONS: Record<string, { sectionId: string; source: string }> = {
-  연예: { sectionId: "08", source: "SBS 연예" },
-  스포츠: { sectionId: "07", source: "SBS 스포츠" },
+  연예: { sectionId: "14", source: "SBS 연예" },
+  스포츠: { sectionId: "09", source: "SBS 스포츠" },
   경제: { sectionId: "02", source: "SBS 경제" },
   사회: { sectionId: "03", source: "SBS 사회" },
   정치: { sectionId: "01", source: "SBS 정치" },
@@ -202,9 +208,9 @@ async function safeFetch(
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const headers = { ...FETCH_HEADERS };
+    const headers: Record<string, string> = { ...FETCH_HEADERS };
     if (referer) {
-      (headers as any)["Referer"] = referer;
+      headers.Referer = referer;
     }
 
     const response = await fetch(url, {

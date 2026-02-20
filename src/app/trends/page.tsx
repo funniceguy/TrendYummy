@@ -86,6 +86,7 @@ export default function TrendsPage() {
     try {
       const response = await fetch(
         `/api/trends?category=${encodeURIComponent(category)}`,
+        { cache: "no-store" },
       );
       const data: TrendResponse = await response.json();
 
