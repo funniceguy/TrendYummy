@@ -85,8 +85,32 @@ const ACTIVE_STATES: VerificationState[] = [
   "IN_PROGRESS",
 ];
 
+const VALID_STATES: VerificationState[] = [
+  "QUEUED",
+  "PLANNING",
+  "PLAN_REVIEW",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "FAILED",
+  "CREATE_FAILED",
+];
+
 export function isActiveVerificationState(state: VerificationState): boolean {
   return ACTIVE_STATES.includes(state);
+}
+
+export function normalizeVerificationState(
+  state: string | undefined | null,
+): VerificationState {
+  if (!state) {
+    return "QUEUED";
+  }
+
+  if (VALID_STATES.includes(state as VerificationState)) {
+    return state as VerificationState;
+  }
+
+  return "QUEUED";
 }
 
 export function stateToProgress(state: VerificationState): number {
@@ -154,7 +178,7 @@ export function createVerificationCard(params: {
   const { session, query, category, crawlChecks, crawlSummary } = params;
   const nowIso = new Date().toISOString();
   const sessionId = normalizeSessionId(session);
-  const state = session.state;
+  const state = normalizeVerificationState(session.state);
 
   return {
     sessionId,

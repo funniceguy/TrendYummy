@@ -45,6 +45,10 @@ export interface Activity {
 export class JulesApiClient {
   private baseUrl: string = 'https://jules.googleapis.com/v1alpha';
 
+  private toSessionResource(sessionId: string): string {
+    return sessionId.startsWith("sessions/") ? sessionId : `sessions/${sessionId}`;
+  }
+
   /**
    * Create a new Jules session
    */
@@ -73,7 +77,8 @@ export class JulesApiClient {
    * Get a specific session by ID
    */
   async getSession(sessionId: string): Promise<Session> {
-    const url = `${this.baseUrl}/sessions/${sessionId}`;
+    const sessionResource = this.toSessionResource(sessionId);
+    const url = `${this.baseUrl}/${sessionResource}`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -128,7 +133,8 @@ export class JulesApiClient {
    * Approve a session plan
    */
   async approvePlan(sessionId: string): Promise<void> {
-    const url = `${this.baseUrl}/${sessionId}:approvePlan`;
+    const sessionResource = this.toSessionResource(sessionId);
+    const url = `${this.baseUrl}/${sessionResource}:approvePlan`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -148,7 +154,8 @@ export class JulesApiClient {
    * Send a message to a session
    */
   async sendMessage(sessionId: string, message: string): Promise<void> {
-    const url = `${this.baseUrl}/${sessionId}:sendMessage`;
+    const sessionResource = this.toSessionResource(sessionId);
+    const url = `${this.baseUrl}/${sessionResource}:sendMessage`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -177,7 +184,8 @@ export class JulesApiClient {
       queryParams.append('pageToken', params.pageToken);
     }
 
-    const url = `${this.baseUrl}/${sessionId}/activities?${queryParams.toString()}`;
+    const sessionResource = this.toSessionResource(sessionId);
+    const url = `${this.baseUrl}/${sessionResource}/activities?${queryParams.toString()}`;
 
     const response = await fetch(url, {
       method: 'GET',

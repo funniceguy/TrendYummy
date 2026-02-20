@@ -2,12 +2,13 @@ import { julesApi } from "@/lib/api/jules-client";
 import {
   type CrawlHealthCheck,
   type JulesVerificationCard,
+  normalizeVerificationState,
   stateToLabel,
   stateToProgress,
   toVerificationActivities,
   upsertVerificationCard,
 } from "@/lib/jules-verification-store";
-import type { Session, SessionState } from "@/types/jules";
+import type { Session } from "@/types/jules";
 
 interface InternalCrawlCheckConfig {
   id: CrawlHealthCheck["id"];
@@ -221,10 +222,6 @@ function buildCardSummary(card: JulesVerificationCard): string {
   )}. Passed checks ${passCount}/${card.crawlChecks.length}.`;
 }
 
-function toStateLabel(state: SessionState): string {
-  return stateToLabel(state);
-}
-
 function buildCardReport(card: JulesVerificationCard): string {
   const crawlLines = card.crawlChecks
     .map((check) => {
@@ -250,7 +247,7 @@ function buildCardReport(card: JulesVerificationCard): string {
     `- Session ID: ${card.sessionId}`,
     `- Query: ${card.query}`,
     `- Category: ${card.category}`,
-    `- Jules State: ${toStateLabel(card.state as SessionState)}`,
+    `- Jules State: ${stateToLabel(card.state)}`,
     `- Progress: ${card.progress}%`,
     "",
     "## 1) Crawler health checks",
@@ -353,15 +350,17 @@ export async function refreshVerificationCard(
     const latestActivityMessage =
       activities[0]?.message || `Session state changed to ${stateToLabel(session.state)}`;
 
+    const nextState = normalizeVerificationState(session.state);
+
     const nextCard: JulesVerificationCard = {
       ...card,
-      state: session.state,
-      progress: stateToProgress(session.state),
+      state: nextState,
+      progress: stateToProgress(nextState),
       statusMessage: latestActivityMessage,
       julesUrl: session.url || card.julesUrl,
       updatedAt: new Date().toISOString(),
       activities: sortActivitiesByNewest(activities),
-      error: session.state === "FAILED" ? latestActivityMessage : undefined,
+      error: nextState === "FAILED" ? latestActivityMessage : undefined,
     };
 
     nextCard.reportSummary = buildCardSummary(nextCard);
