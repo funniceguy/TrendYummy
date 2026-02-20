@@ -1,3 +1,5 @@
+import { getApiPath } from "@/lib/api-path";
+
 export interface AgentSession {
     id: string;
     status: 'idle' | 'analyzing' | 'generating_visuals' | 'planning';
@@ -178,7 +180,7 @@ export const JulesAgentService = {
         try {
             // 2. 실제 뉴스 데이터 수집
             idleSession.status = 'analyzing';
-            const response = await fetch(`/api/analyze?keyword=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`, {
+            const response = await fetch(getApiPath(`/api/analyze?keyword=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`), {
                 cache: 'no-store',
             });
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LayoutWithNav } from "@/components/layout/LayoutWithNav";
 import type { Session } from "@/types/jules";
+import { getApiPath } from "@/lib/api-path";
 
 interface TrendItem {
   rank: number;
@@ -48,6 +49,7 @@ export default function TrendsPage() {
   const [sources, setSources] = useState<string[]>([]);
   const [activeSessionCount, setActiveSessionCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("전체");
+  const isFetchingRef = useRef(false);
   const [filterInfo, setFilterInfo] = useState<{
     country: string;
     timeRange: string;
@@ -56,7 +58,7 @@ export default function TrendsPage() {
   // 활성 세션 수 조회
   const fetchActiveSessionCount = useCallback(async () => {
     try {
-      const response = await fetch("/api/sessions?pageSize=30");
+      const response = await fetch(getApiPath("/api/sessions?pageSize=30"));
       const data = await response.json();
       const sessions: Session[] = data.sessions || [];
       const activeCount = sessions.filter((s) =>
@@ -80,12 +82,17 @@ export default function TrendsPage() {
   }, []);
 
   const handleFetchTrends = async (category: string = selectedCategory) => {
+    if (isFetchingRef.current) {
+      return;
+    }
+
+    isFetchingRef.current = true;
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch(
-        `/api/trends?category=${encodeURIComponent(category)}`,
+        getApiPath(`/api/trends?category=${encodeURIComponent(category)}`),
         { cache: "no-store" },
       );
       const data: TrendResponse = await response.json();
@@ -107,10 +114,14 @@ export default function TrendsPage() {
       );
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
   const handleCategoryChange = (category: string) => {
+    if (isLoading) {
+      return;
+    }
     setSelectedCategory(category);
     handleFetchTrends(category);
   };
@@ -177,6 +188,11 @@ export default function TrendsPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {isLoading && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium border border-cyan-500/40 bg-cyan-500/10 text-cyan-400">
+                수집 중...
+              </span>
+            )}
             <a
               href="https://trends.google.co.kr/trending?geo=KR"
               target="_blank"
@@ -209,11 +225,12 @@ export default function TrendsPage() {
               <button
                 key={category}
                 onClick={() => handleCategoryChange(category)}
+                disabled={isLoading}
                 className={`px-4 py-2 rounded-lg font-medium transition-all ${
                   selectedCategory === category
                     ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
                     : "bg-slate-700/50 text-slate-200 hover:bg-slate-600 hover:text-white"
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {category}
                 {selectedCategory === "전체" && categoryStats[category] && (
@@ -232,7 +249,8 @@ export default function TrendsPage() {
             ❌ {error}
             <button
               onClick={() => handleFetchTrends()}
-              className="ml-4 underline hover:no-underline"
+              disabled={isLoading}
+              className="ml-4 underline hover:no-underline disabled:opacity-50 disabled:cursor-not-allowed"
             >
               다시 시도
             </button>
@@ -283,7 +301,8 @@ export default function TrendsPage() {
                     <button
                       key={cat.category}
                       onClick={() => handleCategoryChange(cat.category)}
-                      className="bg-accent/50 hover:bg-accent rounded-lg p-3 text-center transition-colors"
+                      disabled={isLoading}
+                      className="bg-accent/50 hover:bg-accent rounded-lg p-3 text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="text-2xl font-bold text-primary">
                         {cat.count}
@@ -336,14 +355,16 @@ export default function TrendsPage() {
               {selectedCategory !== "전체" && (
                 <button
                   onClick={() => handleCategoryChange("전체")}
-                  className="px-6 py-3 bg-accent text-foreground rounded-lg font-semibold hover:bg-accent/80 transition-colors"
+                  disabled={isLoading}
+                  className="px-6 py-3 bg-accent text-foreground rounded-lg font-semibold hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   전체 보기
                 </button>
               )}
               <button
                 onClick={() => handleFetchTrends()}
-                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+                disabled={isLoading}
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 다시 시도
               </button>

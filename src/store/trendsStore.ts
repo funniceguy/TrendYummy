@@ -18,7 +18,7 @@ interface TrendState {
     updateSettings: (newSettings: Partial<Settings>) => void;
 }
 
-export const useTrendStore = create<TrendState>((set) => ({
+export const useTrendStore = create<TrendState>((set, get) => ({
     trends: {},
     isLoading: false,
     selectedCategory: 'All',
@@ -28,6 +28,9 @@ export const useTrendStore = create<TrendState>((set) => ({
     },
 
     fetchTrends: async () => {
+        if (get().isLoading) {
+            return;
+        }
         set({ isLoading: true });
         try {
             // For 'All', we fetch everything. In a real app we might optimize this.

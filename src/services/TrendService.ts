@@ -1,3 +1,5 @@
+import { getApiPath } from "@/lib/api-path";
+
 export interface TrendItem {
     id: string;
     category: string;
@@ -81,8 +83,8 @@ export const TrendService = {
     fetchTrends: async (category: string): Promise<TrendItem[]> => {
         try {
             const url = category === '전체'
-                ? '/api/trends'
-                : `/api/trends?category=${encodeURIComponent(category)}`;
+                ? getApiPath('/api/trends')
+                : getApiPath(`/api/trends?category=${encodeURIComponent(category)}`);
             const response = await fetch(url, { cache: 'no-store' });
 
             if (!response.ok) {
@@ -106,7 +108,7 @@ export const TrendService = {
 
     fetchAllTrends: async (): Promise<Record<string, TrendItem[]>> => {
         try {
-            const response = await fetch('/api/trends', { cache: 'no-store' });
+            const response = await fetch(getApiPath('/api/trends'), { cache: 'no-store' });
 
             if (!response.ok) {
                 console.error(`API response not ok: ${response.status}`);

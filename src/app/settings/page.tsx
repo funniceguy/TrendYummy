@@ -10,9 +10,15 @@ export default function SettingsPage() {
     const { settings, updateSettings } = useTrendStore();
     const [interval, setInterval] = useState(settings.refreshInterval);
     const [categories, setCategories] = useState(settings.categories.join('\n'));
+    const [isSaving, setIsSaving] = useState(false);
     const router = useRouter();
 
     const handleSave = () => {
+        if (isSaving) {
+            return;
+        }
+
+        setIsSaving(true);
         const categoryList = categories.split('\n').filter(c => c.trim() !== '');
         updateSettings({
             refreshInterval: interval,
@@ -20,6 +26,7 @@ export default function SettingsPage() {
         });
         alert('설정이 저장되었습니다!');
         router.push('/');
+        setIsSaving(false);
     };
 
     return (
@@ -76,6 +83,7 @@ export default function SettingsPage() {
                             <span>* 한 줄에 하나의 카테고리를 입력하세요.</span>
                             <button
                                 onClick={() => setCategories(settings.categories.join('\n'))}
+                                disabled={isSaving}
                                 className="flex items-center gap-1 hover:text-white transition-colors"
                             >
                                 <RotateCcw className="w-3 h-3" /> 초기화
@@ -87,10 +95,11 @@ export default function SettingsPage() {
                     <div className="pt-6 border-t border-white/10 flex justify-end">
                         <button
                             onClick={handleSave}
-                            className="flex items-center gap-2 bg-gradient-to-r from-neon-cyan to-neon-blue text-black font-bold py-3 px-8 rounded-xl hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all hover:scale-105 active:scale-95"
+                            disabled={isSaving}
+                            className="flex items-center gap-2 bg-gradient-to-r from-neon-cyan to-neon-blue text-black font-bold py-3 px-8 rounded-xl hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                         >
                             <Save className="w-5 h-5" />
-                            설정 저장
+                            {isSaving ? '저장 중...' : '설정 저장'}
                         </button>
                     </div>
                 </div>

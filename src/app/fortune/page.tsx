@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LayoutWithNav } from "@/components/layout/LayoutWithNav";
 import type { Session } from "@/types/jules";
+import { getApiPath } from "@/lib/api-path";
 
 // 별자리 정보
 const ZODIAC_SIGNS = [
@@ -119,10 +120,11 @@ export default function FortunePage() {
     null,
   );
   const [compatibilityLoading, setCompatibilityLoading] = useState(false);
+  const compatibilityLockRef = useRef(false);
 
   const fetchActiveSessionCount = useCallback(async () => {
     try {
-      const response = await fetch("/api/sessions?pageSize=30");
+      const response = await fetch(getApiPath("/api/sessions?pageSize=30"));
       const data = await response.json();
       const sessions: Session[] = data.sessions || [];
       const activeCount = sessions.filter((s) =>
@@ -150,7 +152,7 @@ export default function FortunePage() {
   const loadZodiacFortunes = async () => {
     setZodiacLoading(true);
     try {
-      const response = await fetch("/api/fortune?type=zodiac");
+      const response = await fetch(getApiPath("/api/fortune?type=zodiac"));
       const data = await response.json();
       if (data.success) {
         setZodiacFortunes(data.fortunes);
@@ -165,7 +167,7 @@ export default function FortunePage() {
   const loadAnimalFortunes = async () => {
     setAnimalLoading(true);
     try {
-      const response = await fetch("/api/fortune?type=animal");
+      const response = await fetch(getApiPath("/api/fortune?type=animal"));
       const data = await response.json();
       if (data.success) {
         setAnimalFortunes(data.fortunes);
@@ -179,7 +181,7 @@ export default function FortunePage() {
 
   const loadCelebrities = async () => {
     try {
-      const response = await fetch("/api/fortune");
+      const response = await fetch(getApiPath("/api/fortune"));
       const data = await response.json();
       if (data.celebrities) {
         setCelebrities(data.celebrities);
@@ -190,11 +192,18 @@ export default function FortunePage() {
   };
 
   const checkCompatibility = async (celebrity?: Celebrity) => {
+    if (compatibilityLockRef.current) {
+      return;
+    }
+
+    compatibilityLockRef.current = true;
     setCompatibilityLoading(true);
     try {
       const celebId = celebrity?.id || "";
       const response = await fetch(
-        `/api/fortune?type=compatibility&userZodiac=${userZodiac}&userAnimal=${userAnimal}&celebrity=${celebId}`,
+        getApiPath(
+          `/api/fortune?type=compatibility&userZodiac=${userZodiac}&userAnimal=${userAnimal}&celebrity=${celebId}`,
+        ),
       );
       const data = await response.json();
       if (data.success) {
@@ -205,6 +214,7 @@ export default function FortunePage() {
       console.error("Failed to check compatibility:", error);
     } finally {
       setCompatibilityLoading(false);
+      compatibilityLockRef.current = false;
     }
   };
 
@@ -376,11 +386,12 @@ export default function FortunePage() {
                         <button
                           key={sign.id}
                           onClick={() => setUserZodiac(sign.id)}
+                          disabled={compatibilityLoading}
                           className={`p-2 rounded-lg border text-center transition-all ${
                             userZodiac === sign.id
                               ? "border-pink-500 bg-pink-500/10"
                               : "border-border hover:border-pink-500/50"
-                          }`}
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           <div className="text-lg">{sign.icon}</div>
                           <div className="text-xs">{sign.name}</div>
@@ -399,11 +410,12 @@ export default function FortunePage() {
                         <button
                           key={animal.id}
                           onClick={() => setUserAnimal(animal.id)}
+                          disabled={compatibilityLoading}
                           className={`p-2 rounded-lg border text-center transition-all ${
                             userAnimal === animal.id
                               ? "border-pink-500 bg-pink-500/10"
                               : "border-border hover:border-pink-500/50"
-                          }`}
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           <div className="text-lg">{animal.icon}</div>
                           <div className="text-xs">{animal.name}</div>
@@ -418,6 +430,11 @@ export default function FortunePage() {
               <div className="bg-card border rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">연예인 선택</h2>
+                  {compatibilityLoading && (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium border border-pink-500/40 bg-pink-500/10 text-pink-400">
+                      궁합 계산 중...
+                    </span>
+                  )}
                   <button
                     onClick={getRandomCelebrity}
                     disabled={compatibilityLoading}
@@ -431,11 +448,12 @@ export default function FortunePage() {
                     <button
                       key={celeb.id}
                       onClick={() => checkCompatibility(celeb)}
+                      disabled={compatibilityLoading}
                       className={`p-3 rounded-lg border text-center transition-all ${
                         selectedCelebrity?.id === celeb.id
                           ? "border-pink-500 bg-pink-500/10 ring-2 ring-pink-500"
                           : "border-border hover:border-pink-500/50"
-                      }`}
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       <div className="text-2xl mb-1">{celeb.image}</div>
                       <div className="text-xs font-medium truncate">

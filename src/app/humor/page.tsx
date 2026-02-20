@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LayoutWithNav } from "@/components/layout/LayoutWithNav";
 import type { Session } from "@/types/jules";
+import { getApiPath } from "@/lib/api-path";
 
 interface HumorPost {
   id: string;
@@ -29,10 +30,11 @@ export default function HumorPage() {
   const [error, setError] = useState<string | null>(null);
   const [crawledAt, setCrawledAt] = useState<string | null>(null);
   const [activeSessionCount, setActiveSessionCount] = useState(0);
+  const isCrawlingRef = useRef(false);
 
   const fetchActiveSessionCount = useCallback(async () => {
     try {
-      const response = await fetch("/api/sessions?pageSize=30");
+      const response = await fetch(getApiPath("/api/sessions?pageSize=30"));
       const data = await response.json();
       const sessions: Session[] = data.sessions || [];
       const activeCount = sessions.filter((s) =>
@@ -56,11 +58,16 @@ export default function HumorPage() {
   }, []);
 
   const handleCrawl = async () => {
+    if (isCrawlingRef.current) {
+      return;
+    }
+
+    isCrawlingRef.current = true;
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/humor");
+      const response = await fetch(getApiPath("/api/humor"));
       const data: CrawlResponse = await response.json();
 
       if (!data.success) {
@@ -75,6 +82,7 @@ export default function HumorPage() {
       );
     } finally {
       setIsLoading(false);
+      isCrawlingRef.current = false;
     }
   };
 
@@ -97,6 +105,11 @@ export default function HumorPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {isLoading && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium border border-orange-500/40 bg-orange-500/10 text-orange-400">
+                수집 중...
+              </span>
+            )}
             <a
               href="https://www.todayhumor.co.kr/board/list.php?table=humorbest"
               target="_blank"
@@ -127,7 +140,8 @@ export default function HumorPage() {
             ❌ {error}
             <button
               onClick={handleCrawl}
-              className="ml-4 underline hover:no-underline"
+              disabled={isLoading}
+              className="ml-4 underline hover:no-underline disabled:opacity-50 disabled:cursor-not-allowed"
             >
               다시 시도
             </button>
@@ -310,7 +324,8 @@ export default function HumorPage() {
             </p>
             <button
               onClick={handleCrawl}
-              className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+              disabled={isLoading}
+              className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               다시 시도
             </button>

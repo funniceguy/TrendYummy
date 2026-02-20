@@ -124,6 +124,45 @@ QUEUED → PLANNING → PLAN_REVIEW → IN_PROGRESS → COMPLETED
 - [PLAN.md](./PLAN.md) - Implementation Plan
 - [TECHSPEC.md](./TECHSPEC.md) - Technical Specification
 
+## OCI Deployment Notes
+
+If you deploy under a subpath (example: `/trendyummy`), set:
+
+```bash
+NEXT_PUBLIC_BASE_PATH=/trendyummy
+```
+
+Then rebuild and restart:
+
+```bash
+npm run build
+npm run start
+```
+
+Or run the one-shot deployment script on OCI:
+
+```bash
+chmod +x scripts/deploy-oci.sh scripts/health-check.sh
+NEXT_PUBLIC_BASE_PATH=/trendyummy APP_NAME=trendyummy ./scripts/deploy-oci.sh
+```
+
+Nginx reverse proxy example:
+
+```nginx
+location /trendyummy/ {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+For web crawling from OCI, outbound internet access is required:
+- Instance subnet must have egress to `0.0.0.0/0`
+- Public subnet: Internet Gateway route
+- Private subnet: NAT Gateway route
+- NSG/Security List egress rule must allow TCP 443 (and DNS if restricted)
+
 ## License
 
 Private

@@ -1,6 +1,7 @@
 // Task Executor - Jules 세션을 활용한 작업 실행 관리
 import type { Session } from "@/types/jules";
 import type { TaskExecution, LastExecution } from "@/types/content";
+import { getApiPath } from "@/lib/api-path";
 
 export class TaskExecutor {
   private static readonly STORAGE_KEY_PREFIX = "trendyummy_last_execution_";
@@ -9,7 +10,7 @@ export class TaskExecutor {
    * 유휴 Jules 세션 확인
    */
   static async getIdleSessionCount(): Promise<number> {
-    const response = await fetch("/api/sessions?pageSize=30");
+    const response = await fetch(getApiPath("/api/sessions?pageSize=30"));
     const data = await response.json();
     const sessions: Session[] = data.sessions || [];
 
@@ -40,7 +41,7 @@ export class TaskExecutor {
     const title = this.buildTitle(taskType, params);
 
     // Jules 세션 생성
-    const response = await fetch("/api/sessions", {
+    const response = await fetch(getApiPath("/api/sessions"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -298,7 +299,7 @@ export class TaskExecutor {
     return new Promise((resolve, reject) => {
       const poll = async () => {
         try {
-          const response = await fetch(`/api/sessions/${sessionId}`);
+          const response = await fetch(getApiPath(`/api/sessions/${sessionId}`));
           const session: Session = await response.json();
 
           if (onProgress) {

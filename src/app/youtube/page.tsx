@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LayoutWithNav } from "@/components/layout/LayoutWithNav";
 import type { Session } from "@/types/jules";
+import { getApiPath } from "@/lib/api-path";
 
 interface YouTubeVideo {
   id: string;
@@ -52,6 +53,7 @@ export default function YouTubePage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("0");
   const [isLoading, setIsLoading] = useState(false);
   const [activeSessionCount, setActiveSessionCount] = useState(0);
+  const isFetchingRef = useRef(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [filterInfo, setFilterInfo] = useState<{
     timeRange: string;
@@ -61,7 +63,7 @@ export default function YouTubePage() {
 
   const fetchActiveSessionCount = useCallback(async () => {
     try {
-      const response = await fetch("/api/sessions?pageSize=30");
+      const response = await fetch(getApiPath("/api/sessions?pageSize=30"));
       const data = await response.json();
       const sessions: Session[] = data.sessions || [];
       const activeCount = sessions.filter((s) =>
@@ -85,10 +87,15 @@ export default function YouTubePage() {
   }, []);
 
   const loadTrendingVideos = async () => {
+    if (isFetchingRef.current) {
+      return;
+    }
+
+    isFetchingRef.current = true;
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/youtube");
+      const response = await fetch(getApiPath("/api/youtube"));
       const data: YouTubeResponse = await response.json();
 
       if (data.success && data.categories) {
@@ -100,6 +107,7 @@ export default function YouTubePage() {
       console.error("Failed to load YouTube videos:", error);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
@@ -160,6 +168,11 @@ export default function YouTubePage() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {isLoading && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium border border-red-500/40 bg-red-500/10 text-red-400">
+                수집 중...
+              </span>
+            )}
             <a
               href="https://www.youtube.com/feed/trending?gl=KR"
               target="_blank"
@@ -192,11 +205,12 @@ export default function YouTubePage() {
               <button
                 key={tab.id}
                 onClick={() => setSelectedCategory(tab.id)}
+                disabled={isLoading}
                 className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
                   selectedCategory === tab.id
                     ? "bg-red-500 text-white shadow-lg"
                     : "bg-slate-700/50 text-slate-200 hover:bg-slate-600 hover:text-white"
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 <span>{tab.icon}</span>
                 <span>{tab.name}</span>
@@ -263,7 +277,8 @@ export default function YouTubePage() {
             </p>
             <button
               onClick={loadTrendingVideos}
-              className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+              disabled={isLoading}
+              className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               동영상 불러오기
             </button>

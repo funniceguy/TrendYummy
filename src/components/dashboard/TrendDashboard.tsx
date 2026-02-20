@@ -18,6 +18,7 @@ export const TrendDashboard = () => {
     const [selectedReport, setSelectedReport] = useState<DeepResearchResult | null>(null);
     const [manualResults, setManualResults] = useState<DeepResearchResult[]>([]);
     const [isJulesModalOpen, setIsJulesModalOpen] = useState(false);
+    const [isManualAnalyzing, setIsManualAnalyzing] = useState(false);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
     // Toast 자동 숨기기
@@ -74,6 +75,9 @@ export const TrendDashboard = () => {
     };
 
     const handleManualAnalyze = (query: string) => {
+        if (isManualAnalyzing) return;
+
+        setIsManualAnalyzing(true);
         setToastMessage(`🧠 "${query}" 분석을 시작했습니다...`);
 
         JulesAgentService.analyze(query, 'manual')
@@ -85,6 +89,9 @@ export const TrendDashboard = () => {
             .catch(error => {
                 console.error("Manual analysis failed", error);
                 setToastMessage(`❌ "${query}" 분석에 실패했습니다.`);
+            })
+            .finally(() => {
+                setIsManualAnalyzing(false);
             });
     };
 
@@ -114,6 +121,7 @@ export const TrendDashboard = () => {
                     <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">카테고리 (Categories)</h2>
                     <button
                         onClick={() => setSelectedCategory('All')}
+                        disabled={isLoading}
                         className={`w-full text-left px-4 py-3 rounded-xl transition-all ${selectedCategory === 'All' ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
                     >
                         전체 보기 (All Trends)
@@ -122,6 +130,7 @@ export const TrendDashboard = () => {
                         <button
                             key={cat}
                             onClick={() => setSelectedCategory(cat)}
+                            disabled={isLoading}
                             className={`w-full text-left px-4 py-3 rounded-xl transition-all ${selectedCategory === cat ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
                         >
                             {cat}
@@ -134,6 +143,7 @@ export const TrendDashboard = () => {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setSelectedCategory('Jules Analysis')}
+                            disabled={isLoading}
                             className={`flex-1 text-left px-4 py-3 rounded-xl transition-all flex items-center gap-2 ${isJulesCategory ? 'bg-neon-magenta/20 text-neon-magenta border border-neon-magenta/50 shadow-[0_0_10px_rgba(217,70,239,0.2)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
                         >
                             <Bot className="w-4 h-4" />
@@ -141,7 +151,8 @@ export const TrendDashboard = () => {
                         </button>
                         <button
                             onClick={() => setIsJulesModalOpen(true)}
-                            className="p-3 rounded-xl bg-neon-magenta/10 hover:bg-neon-magenta/30 border border-neon-magenta/30 text-neon-magenta transition-all hover:scale-105 active:scale-95"
+                            disabled={isManualAnalyzing}
+                            className="p-3 rounded-xl bg-neon-magenta/10 hover:bg-neon-magenta/30 border border-neon-magenta/30 text-neon-magenta transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                             title="새 분석 요청"
                         >
                             <Plus className="w-4 h-4" />
@@ -172,9 +183,13 @@ export const TrendDashboard = () => {
                                 '자동 업데이트 대기중...'
                             }
                         </span>
+                        <span className={`text-xs px-2 py-1 rounded-full border ${isLoading || isManualAnalyzing ? 'text-neon-cyan border-neon-cyan/50 bg-neon-cyan/10' : 'text-gray-400 border-white/10 bg-white/5'}`}>
+                            {isLoading ? '트렌드 수집 중...' : isManualAnalyzing ? 'Jules 분석 중...' : '대기'}
+                        </span>
                         <button
                             onClick={() => fetchTrends()}
-                            className="p-2 rounded-full hover:bg-white/10 transition-colors text-neon-cyan hover:rotate-180 duration-700"
+                            disabled={isLoading}
+                            className="p-2 rounded-full hover:bg-white/10 transition-colors text-neon-cyan hover:rotate-180 duration-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:rotate-0"
                             title="새로고침"
                         >
                             <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -194,7 +209,8 @@ export const TrendDashboard = () => {
                                         <p>아직 Jules에게 요청한 분석 내역이 없습니다.</p>
                                         <button
                                             onClick={() => setIsJulesModalOpen(true)}
-                                            className="mt-4 px-4 py-2 bg-neon-magenta/20 text-neon-magenta rounded-lg hover:bg-neon-magenta/30 transition-all font-bold text-sm"
+                                            disabled={isManualAnalyzing}
+                                            className="mt-4 px-4 py-2 bg-neon-magenta/20 text-neon-magenta rounded-lg hover:bg-neon-magenta/30 transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             + 첫 번째 분석 요청하기
                                         </button>
