@@ -342,13 +342,20 @@ export async function refreshVerificationCard(
       }
     }
 
-    const activitiesResponse = await julesApi.listActivities(card.sessionId, {
-      pageSize: 30,
-    });
-
-    const activities = toVerificationActivities(activitiesResponse.activities);
-    const latestActivityMessage =
-      activities[0]?.message || `Session state changed to ${stateToLabel(session.state)}`;
+    let activities = card.activities;
+    let latestActivityMessage = `Session state changed to ${stateToLabel(session.state)}`;
+    try {
+      const activitiesResponse = await julesApi.listActivities(card.sessionId, {
+        pageSize: 30,
+      });
+      const parsedActivities = toVerificationActivities(activitiesResponse.activities);
+      activities = sortActivitiesByNewest(parsedActivities);
+      latestActivityMessage =
+        activities[0]?.message || latestActivityMessage;
+    } catch {
+      // Activity history is optional for progress updates.
+      activities = sortActivitiesByNewest(card.activities);
+    }
 
     const nextState = normalizeVerificationState(session.state);
 
@@ -359,7 +366,7 @@ export async function refreshVerificationCard(
       statusMessage: latestActivityMessage,
       julesUrl: session.url || card.julesUrl,
       updatedAt: new Date().toISOString(),
-      activities: sortActivitiesByNewest(activities),
+      activities,
       error: nextState === "FAILED" ? latestActivityMessage : undefined,
     };
 
