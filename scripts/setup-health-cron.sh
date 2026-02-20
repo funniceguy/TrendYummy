@@ -10,7 +10,10 @@ CRON_SCHEDULE="${CRON_SCHEDULE:-*/5 * * * *}"
 
 CRON_LINE="${CRON_SCHEDULE} cd ${APP_DIR} && NEXT_PUBLIC_BASE_PATH=${BASE_PATH} APP_NAME=${APP_NAME} BASE_URL=${BASE_URL} ./scripts/health-monitor.sh >> ${LOG_FILE} 2>&1"
 
-(crontab -l 2>/dev/null | grep -Fv './scripts/health-monitor.sh'; echo "${CRON_LINE}") | crontab -
+{
+  crontab -l 2>/dev/null | grep -Fv './scripts/health-monitor.sh' || true
+  echo "${CRON_LINE}"
+} | crontab -
 
 echo "Registered cron line:"
 echo "${CRON_LINE}"
