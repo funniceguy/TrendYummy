@@ -318,7 +318,7 @@ export async function createVerificationSession(params: {
       },
     },
     requirePlanApproval: false,
-    automationMode: "MANUAL",
+    automationMode: "AUTO_CREATE_PR",
   });
 
   return {
