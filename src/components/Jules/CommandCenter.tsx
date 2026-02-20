@@ -1,24 +1,40 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { JulesAgentService, DeepResearchResult } from '@/services/JulesAgentService';
+import { JulesAgentService, DeepResearchResult, SessionStatus } from '@/services/JulesAgentService';
 import { Bot, Send, Activity, BrainCircuit, Maximize2, X } from 'lucide-react';
 import mermaid from 'mermaid';
 
 export const JulesCommandCenter = () => {
+    const DEFAULT_STATUS: SessionStatus = {
+        total: 15,
+        active: 0,
+        idle: 15,
+        available: 15,
+        details: [],
+    };
     const [query, setQuery] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [result, setResult] = useState<DeepResearchResult | null>(null);
-    const [sessionStatus, setSessionStatus] = useState<any>(null); // Quick mock type
+    const [sessionStatus, setSessionStatus] = useState<SessionStatus>(DEFAULT_STATUS);
     const [showFullResult, setShowFullResult] = useState(false);
 
     useEffect(() => {
         mermaid.initialize({ startOnLoad: true, theme: 'dark' });
 
-        // Poll for status
+        const refreshStatus = async () => {
+            try {
+                const status = await JulesAgentService.refreshSessionStatus();
+                setSessionStatus(status);
+            } catch (error) {
+                console.error("Failed to refresh session status:", error);
+            }
+        };
+
+        void refreshStatus();
         const interval = setInterval(() => {
-            setSessionStatus(JulesAgentService.getSessionStatus());
-        }, 1000);
+            void refreshStatus();
+        }, 3000);
         return () => clearInterval(interval);
     }, []);
 

@@ -124,6 +124,19 @@ QUEUED → PLANNING → PLAN_REVIEW → IN_PROGRESS → COMPLETED
 - [PLAN.md](./PLAN.md) - Implementation Plan
 - [TECHSPEC.md](./TECHSPEC.md) - Technical Specification
 
+## Jules Verification Cards
+
+The dashboard now creates one verification card per Jules session ID.
+
+- New request flow: create session -> create card immediately -> poll progress/activity updates
+- Session capacity: capped by `MAX_VERIFICATION_SESSIONS` (15)
+- Built-in crawler checks executed for each request:
+  - `/api/trends`
+  - `/api/youtube`
+  - `/api/humor`
+- Audio output per card:
+  - `GET /api/jules-verification/{sessionId}/audio`
+
 ## OCI Deployment Notes
 
 If you deploy under a subpath (example: `/trendyummy`), set:

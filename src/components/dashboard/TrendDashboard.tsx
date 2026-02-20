@@ -1,334 +1,452 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { useTrendStore } from '@/store/trendsStore';
-import { TrendCard } from './TrendCard';
-import { JulesCard } from '../Jules/JulesCard';
-import { JulesInputModal } from '../Jules/JulesInputModal';
-import { JulesAgentService, DeepResearchResult } from '@/services/JulesAgentService';
-import { TrendItem } from '@/services/TrendService';
-import { RefreshCw, Zap, BrainCircuit, FileText, Settings, X, Activity, Plus, Bot } from 'lucide-react';
-import Link from 'next/link';
-import mermaid from 'mermaid';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import mermaid from "mermaid";
+import {
+  Activity,
+  Bot,
+  BrainCircuit,
+  FileText,
+  Hash,
+  Plus,
+  RefreshCw,
+  Settings,
+  Volume2,
+  X,
+  Zap,
+} from "lucide-react";
+import { useTrendStore } from "@/store/trendsStore";
+import { TrendCard } from "./TrendCard";
+import { JulesCard } from "../Jules/JulesCard";
+import { JulesInputModal } from "../Jules/JulesInputModal";
+import {
+  JulesAgentService,
+  type DeepResearchResult,
+  type JulesVerificationCard,
+  type SessionStatus,
+} from "@/services/JulesAgentService";
 
-export const TrendDashboard = () => {
-    const { trends, isLoading, selectedCategory, settings, fetchTrends, setSelectedCategory } = useTrendStore();
-    const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
-    const [researchReports, setResearchReports] = useState<Record<string, DeepResearchResult>>({});
-    const [selectedReport, setSelectedReport] = useState<DeepResearchResult | null>(null);
-    const [manualResults, setManualResults] = useState<DeepResearchResult[]>([]);
-    const [isJulesModalOpen, setIsJulesModalOpen] = useState(false);
-    const [isManualAnalyzing, setIsManualAnalyzing] = useState(false);
-    const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-    // Toast 자동 숨기기
-    useEffect(() => {
-        if (!toastMessage) return;
-        const timer = setTimeout(() => setToastMessage(null), 4000);
-        return () => clearTimeout(timer);
-    }, [toastMessage]);
-
-    useEffect(() => {
-        fetchTrends();
-        // Set up interval for auto-refresh based on settings
-        const interval = setInterval(fetchTrends, settings.refreshInterval * 60 * 1000);
-        return () => clearInterval(interval);
-    }, [settings.refreshInterval]);
-
-    useEffect(() => {
-        // Initialize mermaid for reports
-        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
-    }, []);
-
-    useEffect(() => {
-        if (selectedReport?.visualContent?.type === 'mindmap') {
-            setTimeout(() => {
-                mermaid.contentLoaded();
-            }, 100);
-        }
-    }, [selectedReport]);
-
-    // 비동기 분석 (Fire-and-Forget — UI를 차단하지 않음)
-    const handleAnalyze = (item: TrendItem) => {
-        if (analyzingIds.has(item.id)) return;
-
-        setAnalyzingIds(prev => new Set(prev).add(item.id));
-        setToastMessage(`🧠 "${item.keyword}" 분석을 시작했습니다. 완료 시 알림이 표시됩니다.`);
-
-        // Fire-and-forget: .then() 사용하여 결과를 비동기로 처리
-        JulesAgentService.analyze(item.keyword, 'trend', item.category)
-            .then(result => {
-                setResearchReports(prev => ({ ...prev, [item.id]: result }));
-                setToastMessage(`✅ "${item.keyword}" 분석이 완료되었습니다! 카드의 리포트 아이콘을 클릭하세요.`);
-            })
-            .catch(error => {
-                console.error("Analysis failed", error);
-                setToastMessage(`❌ "${item.keyword}" 분석에 실패했습니다.`);
-            })
-            .finally(() => {
-                setAnalyzingIds(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(item.id);
-                    return newSet;
-                });
-            });
-    };
-
-    const handleManualAnalyze = (query: string) => {
-        if (isManualAnalyzing) return;
-
-        setIsManualAnalyzing(true);
-        setToastMessage(`🧠 "${query}" 분석을 시작했습니다...`);
-
-        JulesAgentService.analyze(query, 'manual')
-            .then(result => {
-                setManualResults(prev => [result, ...prev]);
-                setToastMessage(`✅ "${query}" 분석이 완료되었습니다!`);
-                setSelectedCategory('Jules Analysis');
-            })
-            .catch(error => {
-                console.error("Manual analysis failed", error);
-                setToastMessage(`❌ "${query}" 분석에 실패했습니다.`);
-            })
-            .finally(() => {
-                setIsManualAnalyzing(false);
-            });
-    };
-
-    const filteredTrends = selectedCategory === 'All'
-        ? Object.values(trends).flat()
-        : trends[selectedCategory] || [];
-
-    const isJulesCategory = selectedCategory === 'Jules Analysis';
-
-    return (
-        <div className="flex h-screen overflow-hidden bg-background font-sans text-foreground">
-            {/* Sidebar / Filters Panel - Width increased for Jules Command Center */}
-            <aside className="w-80 glass-panel border-r border-white/10 flex flex-col z-20 shadow-2xl bg-black/40">
-                <div className="p-6 border-b border-white/10">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-neon-cyan/20 rounded-lg border border-neon-cyan/50 shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-                            <Zap className="w-6 h-6 text-neon-cyan" />
-                        </div>
-                        <h1 className="text-2xl font-bold tracking-tighter neon-text-cyan">
-                            Trend<span className="text-white">Yummy</span>
-                        </h1>
-                    </div>
-                </div>
-
-                {/* Navigation & Categories (Priority Display) */}
-                <nav className="p-6 space-y-2 overflow-y-auto flex-1 custom-scrollbar">
-                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">카테고리 (Categories)</h2>
-                    <button
-                        onClick={() => setSelectedCategory('All')}
-                        disabled={isLoading}
-                        className={`w-full text-left px-4 py-3 rounded-xl transition-all ${selectedCategory === 'All' ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
-                    >
-                        전체 보기 (All Trends)
-                    </button>
-                    {settings.categories.map(cat => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            disabled={isLoading}
-                            className={`w-full text-left px-4 py-3 rounded-xl transition-all ${selectedCategory === cat ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-
-                    <div className="my-4 border-t border-white/10"></div>
-
-                    {/* Jules Special Category */}
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setSelectedCategory('Jules Analysis')}
-                            disabled={isLoading}
-                            className={`flex-1 text-left px-4 py-3 rounded-xl transition-all flex items-center gap-2 ${isJulesCategory ? 'bg-neon-magenta/20 text-neon-magenta border border-neon-magenta/50 shadow-[0_0_10px_rgba(217,70,239,0.2)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            <Bot className="w-4 h-4" />
-                            <span>Jules Analysis</span>
-                        </button>
-                        <button
-                            onClick={() => setIsJulesModalOpen(true)}
-                            disabled={isManualAnalyzing}
-                            className="p-3 rounded-xl bg-neon-magenta/10 hover:bg-neon-magenta/30 border border-neon-magenta/30 text-neon-magenta transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                            title="새 분석 요청"
-                        >
-                            <Plus className="w-4 h-4" />
-                        </button>
-                    </div>
-                </nav>
-
-                <div className="p-6 border-t border-white/10">
-                    <Link href="/settings" className="flex items-center gap-3 text-gray-400 hover:text-white transition-all hover:bg-white/5 p-3 rounded-lg group border border-transparent hover:border-white/10">
-                        <Settings className="w-5 h-5 group-hover:text-neon-cyan transition-colors" />
-                        <span className="text-sm font-medium">시스템 설정 (Settings)</span>
-                    </Link>
-                </div>
-            </aside>
-
-            {/* Main Content */}
-            <main className="flex-1 flex flex-col overflow-hidden relative">
-                {/* Header */}
-                <header className="h-16 border-b border-white/10 glass-panel flex items-center justify-between px-8 z-10 bg-black/20 backdrop-blur-sm">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        {selectedCategory === 'All' ? <GlobeIcon className="w-5 h-5 text-gray-400" /> : <HashIcon className="w-5 h-5 text-gray-400" />}
-                        {selectedCategory === 'All' ? '전체 트렌드' : selectedCategory} 대시보드
-                    </h2>
-                    <div className="flex items-center gap-4">
-                        <span className="text-xs text-gray-500">
-                            {isJulesCategory ?
-                                `분석된 리포트: ${manualResults.length}개` :
-                                '자동 업데이트 대기중...'
-                            }
-                        </span>
-                        <span className={`text-xs px-2 py-1 rounded-full border ${isLoading || isManualAnalyzing ? 'text-neon-cyan border-neon-cyan/50 bg-neon-cyan/10' : 'text-gray-400 border-white/10 bg-white/5'}`}>
-                            {isLoading ? '트렌드 수집 중...' : isManualAnalyzing ? 'Jules 분석 중...' : '대기'}
-                        </span>
-                        <button
-                            onClick={() => fetchTrends()}
-                            disabled={isLoading}
-                            className="p-2 rounded-full hover:bg-white/10 transition-colors text-neon-cyan hover:rotate-180 duration-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:rotate-0"
-                            title="새로고침"
-                        >
-                            <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-                        </button>
-                    </div>
-                </header>
-
-                {/* Grid */}
-                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
-                        {/* Display Jules Manual Results First */}
-                        {isJulesCategory && (
-                            <>
-                                {manualResults.length === 0 ? (
-                                    <div className="col-span-full text-center text-gray-500 py-20 flex flex-col items-center">
-                                        <Bot className="w-12 h-12 mb-4 opacity-20 text-neon-magenta" />
-                                        <p>아직 Jules에게 요청한 분석 내역이 없습니다.</p>
-                                        <button
-                                            onClick={() => setIsJulesModalOpen(true)}
-                                            disabled={isManualAnalyzing}
-                                            className="mt-4 px-4 py-2 bg-neon-magenta/20 text-neon-magenta rounded-lg hover:bg-neon-magenta/30 transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            + 첫 번째 분석 요청하기
-                                        </button>
-                                    </div>
-                                ) : (
-                                    manualResults.map(result => (
-                                        <JulesCard
-                                            key={result.id}
-                                            result={result}
-                                            onClick={(r) => setSelectedReport(r)}
-                                        />
-                                    ))
-                                )}
-                            </>
-                        )}
-
-                        {!isJulesCategory && (
-                            <>
-                                {filteredTrends.length === 0 && !isLoading && (
-                                    <div className="col-span-full text-center text-gray-500 py-20 flex flex-col items-center">
-                                        <Zap className="w-12 h-12 mb-4 opacity-20" />
-                                        <p>트렌드 데이터가 없습니다. 새로고침을 시도해보세요.</p>
-                                    </div>
-                                )}
-                                {filteredTrends.map(item => (
-                                    <div key={item.id} className="relative group">
-                                        <TrendCard
-                                            item={item}
-                                            onAnalyze={handleAnalyze}
-                                            isAnalyzing={analyzingIds.has(item.id)}
-                                        />
-                                        {researchReports[item.id] && (
-                                            <div className="absolute top-2 right-2 z-20">
-                                                <button
-                                                    onClick={() => setSelectedReport(researchReports[item.id])}
-                                                    className="p-2 bg-neon-magenta rounded-full shadow-[0_0_15px_rgba(217,70,239,0.5)] animate-bounce hover:scale-110 transition-transform"
-                                                    title="리포트 보기"
-                                                >
-                                                    <FileText className="w-4 h-4 text-white" />
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </>
-                        )}
-                    </div>
-                </div>
-
-                {/* Report Modal / Overlay */}
-                {selectedReport && (
-                    <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-lg flex items-center justify-center p-12">
-                        <div className="bg-gray-900 border border-neon-magenta/50 w-full max-w-6xl h-[90vh] overflow-hidden rounded-2xl shadow-[0_0_50px_rgba(217,70,239,0.3)] flex flex-col">
-                            <div className="flex justify-between items-center p-6 border-b border-white/10 bg-white/5">
-                                <h3 className="text-2xl font-bold text-neon-magenta flex items-center gap-2">
-                                    <BrainCircuit className="w-6 h-6" /> Jules 심층 분석 결과
-                                </h3>
-                                <button onClick={() => setSelectedReport(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                                    <X className="w-6 h-6 text-gray-400 hover:text-white" />
-                                </button>
-                            </div>
-
-                            <div className="flex-1 flex overflow-hidden">
-                                <div className="w-1/2 p-8 overflow-y-auto border-r border-white/10 prose prose-invert max-w-none">
-                                    <pre className="whitespace-pre-wrap font-sans text-gray-300 leading-relaxed">
-                                        {selectedReport.markdownReport}
-                                    </pre>
-                                </div>
-                                <div className="w-1/2 p-8 bg-black/20 flex flex-col">
-                                    <h3 className="text-lg font-bold text-neon-lime mb-4 flex items-center gap-2">
-                                        <Activity className="w-5 h-5" /> 사고 과정 시각화 (Visualization)
-                                    </h3>
-                                    <div className="flex-1 bg-white/5 rounded-xl border border-white/10 overflow-hidden flex items-center justify-center relative">
-                                        {selectedReport.visualContent?.type === 'mindmap' ? (
-                                            <div className="mermaid">
-                                                {selectedReport.visualContent.content}
-                                            </div>
-                                        ) : (
-                                            <div className="text-gray-500">시각화 데이터 없음</div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="p-4 border-t border-white/10 bg-black/20 text-xs text-gray-500 text-right flex justify-between px-8">
-                                <span>Session ID: {selectedReport.id}</span>
-                                <span>분석 소요 시간: {selectedReport.analysisTime}초 | 참조 출처: {selectedReport.sourceCount}개</span>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Jules Input Modal */}
-                <JulesInputModal
-                    isOpen={isJulesModalOpen}
-                    onClose={() => setIsJulesModalOpen(false)}
-                    onAnalyze={handleManualAnalyze}
-                />
-
-                {/* Toast Notification */}
-                {toastMessage && (
-                    <div className="fixed bottom-6 right-6 z-[100] max-w-md animate-in slide-in-from-bottom-4">
-                        <div className="bg-gray-900/95 border border-neon-cyan/30 backdrop-blur-lg rounded-xl px-5 py-3 shadow-[0_0_30px_rgba(6,182,212,0.2)] text-sm text-gray-200">
-                            {toastMessage}
-                        </div>
-                    </div>
-                )}
-            </main>
-        </div>
-    );
+const DEFAULT_STATUS: SessionStatus = {
+  total: 15,
+  active: 0,
+  idle: 15,
+  available: 15,
+  details: [],
 };
 
-// Icons components for internal usage
+export const TrendDashboard: React.FC = () => {
+  const {
+    trends,
+    isLoading,
+    selectedCategory,
+    settings,
+    fetchTrends,
+    setSelectedCategory,
+  } = useTrendStore();
 
-const GlobeIcon = ({ className }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></svg>
-);
+  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [verificationCards, setVerificationCards] = useState<JulesVerificationCard[]>([]);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>(DEFAULT_STATUS);
+  const [isCreatingManualVerification, setIsCreatingManualVerification] =
+    useState(false);
+  const [isRefreshingVerificationCards, setIsRefreshingVerificationCards] =
+    useState(false);
+  const [selectedReport, setSelectedReport] = useState<DeepResearchResult | null>(
+    null,
+  );
+  const [isJulesModalOpen, setIsJulesModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-const HashIcon = ({ className }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="9" y2="9" /><line x1="4" x2="20" y1="15" y2="15" /><line x1="10" x2="8" y1="3" y2="21" /><line x1="16" x2="14" y1="3" y2="21" /></svg>
-);
+  const isJulesCategory = selectedCategory === "Jules Analysis";
+
+  const filteredTrends = useMemo(() => {
+    if (selectedCategory === "All") {
+      return Object.values(trends).flat();
+    }
+    return trends[selectedCategory] || [];
+  }, [selectedCategory, trends]);
+
+  const showBusyBadge =
+    isLoading || isCreatingManualVerification || sessionStatus.active > 0;
+
+  const loadVerificationCards = useCallback(async () => {
+    setIsRefreshingVerificationCards(true);
+    try {
+      const data = await JulesAgentService.listVerificationCards();
+      setVerificationCards(data.cards);
+      setSessionStatus(JulesAgentService.getSessionStatus());
+    } catch (error) {
+      console.error("Failed to load verification cards:", error);
+    } finally {
+      setIsRefreshingVerificationCards(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchTrends();
+    const interval = setInterval(() => {
+      void fetchTrends();
+    }, settings.refreshInterval * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [fetchTrends, settings.refreshInterval]);
+
+  useEffect(() => {
+    void loadVerificationCards();
+    const interval = setInterval(() => {
+      void loadVerificationCards();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [loadVerificationCards]);
+
+  useEffect(() => {
+    if (!toastMessage) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+    return () => clearTimeout(timeoutId);
+  }, [toastMessage]);
+
+  useEffect(() => {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "dark",
+      securityLevel: "loose",
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedReport?.visualContent) {
+      return;
+    }
+    setTimeout(() => {
+      mermaid.contentLoaded();
+    }, 100);
+  }, [selectedReport]);
+
+  const handleAnalyzeTrend = async (itemId: string, query: string, category: string) => {
+    setAnalyzingIds((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
+
+    try {
+      const card = await JulesAgentService.createVerification(query, category);
+      setToastMessage(
+        `세션 ${card.sessionId} 카드가 생성되었습니다. 진행 상황을 실시간으로 추적합니다.`,
+      );
+      setSelectedCategory("Jules Analysis");
+      await loadVerificationCards();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setToastMessage(`분석 요청 실패: ${message}`);
+    } finally {
+      setAnalyzingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }
+  };
+
+  const handleAnalyze = (item: { id: string; keyword: string; category: string }) => {
+    if (analyzingIds.has(item.id)) {
+      return;
+    }
+    void handleAnalyzeTrend(item.id, item.keyword, item.category);
+  };
+
+  const handleManualAnalyze = async (query: string) => {
+    if (isCreatingManualVerification) {
+      return;
+    }
+    setIsCreatingManualVerification(true);
+    try {
+      const card = await JulesAgentService.createVerification(query, "manual");
+      setToastMessage(
+        `수동 검증 요청 접수 완료: ${card.sessionId}. 카드에서 진행 상황을 확인하세요.`,
+      );
+      setSelectedCategory("Jules Analysis");
+      await loadVerificationCards();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setToastMessage(`수동 요청 실패: ${message}`);
+    } finally {
+      setIsCreatingManualVerification(false);
+    }
+  };
+
+  const handleOpenReport = (card: JulesVerificationCard) => {
+    setSelectedReport(JulesAgentService.toDeepResearchResult(card));
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-background font-sans text-foreground">
+      <aside className="z-20 flex w-80 flex-col border-r border-white/10 bg-black/40 shadow-2xl">
+        <div className="border-b border-white/10 p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border border-neon-cyan/50 bg-neon-cyan/20 p-2 shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+              <Zap className="h-6 w-6 text-neon-cyan" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tighter text-neon-cyan">
+              Trend<span className="text-white">Yummy</span>
+            </h1>
+          </div>
+        </div>
+
+        <nav className="flex-1 space-y-2 overflow-y-auto p-6 custom-scrollbar">
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Categories
+          </h2>
+          <button
+            onClick={() => setSelectedCategory("All")}
+            disabled={isLoading}
+            className={`w-full rounded-xl px-4 py-3 text-left transition-all ${
+              selectedCategory === "All"
+                ? "border border-neon-cyan/50 bg-neon-cyan/20 text-neon-cyan shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                : "text-gray-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            전체 보기
+          </button>
+
+          {settings.categories.map((category) => (
+            <button
+              key={category}
+              onClick={() => setSelectedCategory(category)}
+              disabled={isLoading}
+              className={`w-full rounded-xl px-4 py-3 text-left transition-all ${
+                selectedCategory === category
+                  ? "border border-neon-cyan/50 bg-neon-cyan/20 text-neon-cyan shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                  : "text-gray-400 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              {category}
+            </button>
+          ))}
+
+          <div className="my-4 border-t border-white/10" />
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedCategory("Jules Analysis")}
+              className={`flex-1 rounded-xl px-4 py-3 text-left transition-all ${
+                isJulesCategory
+                  ? "border border-neon-magenta/50 bg-neon-magenta/20 text-neon-magenta shadow-[0_0_10px_rgba(217,70,239,0.2)]"
+                  : "text-gray-400 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                Jules Analysis
+              </span>
+            </button>
+            <button
+              onClick={() => setIsJulesModalOpen(true)}
+              disabled={isCreatingManualVerification || sessionStatus.available <= 0}
+              className="rounded-xl border border-neon-magenta/30 bg-neon-magenta/10 p-3 text-neon-magenta transition-all hover:scale-105 hover:bg-neon-magenta/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+              title="새 검증 요청"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-gray-300">
+            <p>
+              세션 사용량: {sessionStatus.active}/{sessionStatus.total}
+            </p>
+            <p>가용 세션: {sessionStatus.available}</p>
+            <p>생성 카드: {verificationCards.length}</p>
+          </div>
+        </nav>
+
+        <div className="border-t border-white/10 p-6">
+          <Link
+            href="/settings"
+            className="group flex items-center gap-3 rounded-lg border border-transparent p-3 text-gray-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-white"
+          >
+            <Settings className="h-5 w-5 transition-colors group-hover:text-neon-cyan" />
+            <span className="text-sm font-medium">설정</span>
+          </Link>
+        </div>
+      </aside>
+
+      <main className="relative flex flex-1 flex-col overflow-hidden">
+        <header className="z-10 flex h-16 items-center justify-between border-b border-white/10 bg-black/20 px-8 backdrop-blur-sm">
+          <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+            {isJulesCategory ? (
+              <Bot className="h-5 w-5 text-neon-magenta" />
+            ) : (
+              <Hash className="h-5 w-5 text-gray-400" />
+            )}
+            {isJulesCategory ? "Jules Verification Dashboard" : `${selectedCategory} 대시보드`}
+          </h2>
+
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-gray-500">
+              {isJulesCategory
+                ? `검증 카드 ${verificationCards.length}개`
+                : "트렌드 자동 업데이트 활성"}
+            </span>
+            <span
+              className={`rounded-full border px-2 py-1 text-xs ${
+                showBusyBadge
+                  ? "border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan"
+                  : "border-white/10 bg-white/5 text-gray-400"
+              }`}
+            >
+              {isLoading
+                ? "트렌드 수집 중..."
+                : isCreatingManualVerification
+                  ? "세션 생성 중..."
+                  : sessionStatus.active > 0
+                    ? `Jules 진행 중 (${sessionStatus.active})`
+                    : "대기"}
+            </span>
+            <button
+              onClick={() => {
+                void fetchTrends();
+                void loadVerificationCards();
+              }}
+              disabled={isLoading || isRefreshingVerificationCards}
+              className="rounded-full p-2 text-neon-cyan transition-colors duration-700 hover:rotate-180 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:rotate-0"
+              title="새로고침"
+            >
+              <RefreshCw
+                className={`h-5 w-5 ${
+                  isLoading || isRefreshingVerificationCards ? "animate-spin" : ""
+                }`}
+              />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            {isJulesCategory ? (
+              verificationCards.length === 0 ? (
+                <div className="col-span-full flex flex-col items-center py-20 text-center text-gray-500">
+                  <Bot className="mb-4 h-12 w-12 text-neon-magenta/40" />
+                  <p>아직 생성된 Jules 검증 카드가 없습니다.</p>
+                  <button
+                    onClick={() => setIsJulesModalOpen(true)}
+                    className="mt-4 rounded-lg bg-neon-magenta/20 px-4 py-2 text-sm font-bold text-neon-magenta transition hover:bg-neon-magenta/30"
+                  >
+                    + 첫 검증 요청하기
+                  </button>
+                </div>
+              ) : (
+                verificationCards.map((card) => (
+                  <JulesCard
+                    key={card.sessionId}
+                    card={card}
+                    onOpenReport={handleOpenReport}
+                  />
+                ))
+              )
+            ) : filteredTrends.length === 0 && !isLoading ? (
+              <div className="col-span-full flex flex-col items-center py-20 text-center text-gray-500">
+                <Zap className="mb-4 h-12 w-12 opacity-20" />
+                <p>트렌드 데이터가 없습니다. 새로고침을 시도해 주세요.</p>
+              </div>
+            ) : (
+              filteredTrends.map((item) => (
+                <TrendCard
+                  key={item.id}
+                  item={item}
+                  onAnalyze={handleAnalyze}
+                  isAnalyzing={analyzingIds.has(item.id)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+
+        {selectedReport ? (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-12 backdrop-blur-lg">
+            <div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-neon-magenta/50 bg-gray-900 shadow-[0_0_50px_rgba(217,70,239,0.3)]">
+              <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-6">
+                <h3 className="flex items-center gap-2 text-2xl font-bold text-neon-magenta">
+                  <BrainCircuit className="h-6 w-6" />
+                  Jules 검증 리포트
+                </h3>
+                <button
+                  onClick={() => setSelectedReport(null)}
+                  className="rounded-full p-2 transition-colors hover:bg-white/10"
+                >
+                  <X className="h-6 w-6 text-gray-400 hover:text-white" />
+                </button>
+              </div>
+
+              <div className="flex flex-1 overflow-hidden">
+                <div className="prose prose-invert max-w-none w-1/2 overflow-y-auto border-r border-white/10 p-8">
+                  <pre className="whitespace-pre-wrap font-sans leading-relaxed text-gray-300">
+                    {selectedReport.markdownReport}
+                  </pre>
+                </div>
+                <div className="flex w-1/2 flex-col bg-black/20 p-8">
+                  <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-neon-lime">
+                    <Activity className="h-5 w-5" />
+                    Verification Graph
+                  </h3>
+                  <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                    {selectedReport.visualContent ? (
+                      <div className="mermaid">{selectedReport.visualContent.content}</div>
+                    ) : (
+                      <div className="text-gray-500">시각화 데이터가 없습니다.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-white/10 bg-black/20 px-8 py-4 text-xs text-gray-400">
+                <div className="flex items-center gap-4">
+                  <span>Session ID: {selectedReport.sessionId}</span>
+                  <span>상태: {selectedReport.state}</span>
+                  <span>크롤링 검증: {selectedReport.crawlVerified ? "정상" : "확인 필요"}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>분석 시간: {selectedReport.analysisTime}초</span>
+                  <a
+                    href={JulesAgentService.getAudioUrl(selectedReport.sessionId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-neon-cyan/40 bg-neon-cyan/10 px-2 py-1 font-semibold text-neon-cyan transition hover:bg-neon-cyan/20"
+                  >
+                    <Volume2 className="h-3 w-3" />
+                    음성 파일
+                  </a>
+                  <button
+                    onClick={() => setSelectedReport(null)}
+                    className="inline-flex items-center gap-1 rounded-md border border-neon-magenta/40 bg-neon-magenta/10 px-2 py-1 font-semibold text-neon-magenta transition hover:bg-neon-magenta/20"
+                  >
+                    <FileText className="h-3 w-3" />
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <JulesInputModal
+          isOpen={isJulesModalOpen}
+          onClose={() => setIsJulesModalOpen(false)}
+          onAnalyze={handleManualAnalyze}
+        />
+
+        {toastMessage ? (
+          <div className="fixed bottom-6 right-6 z-[100] max-w-md animate-in slide-in-from-bottom-4">
+            <div className="rounded-xl border border-neon-cyan/30 bg-gray-900/95 px-5 py-3 text-sm text-gray-200 shadow-[0_0_30px_rgba(6,182,212,0.2)] backdrop-blur-lg">
+              {toastMessage}
+            </div>
+          </div>
+        ) : null}
+      </main>
+    </div>
+  );
+};
