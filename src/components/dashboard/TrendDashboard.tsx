@@ -45,7 +45,6 @@ export const TrendDashboard: React.FC = () => {
     setSelectedCategory,
   } = useTrendStore();
 
-  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [verificationCards, setVerificationCards] = useState<JulesVerificationCard[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>(DEFAULT_STATUS);
   const [isCreatingManualVerification, setIsCreatingManualVerification] =
@@ -126,39 +125,6 @@ export const TrendDashboard: React.FC = () => {
       mermaid.contentLoaded();
     }, 100);
   }, [selectedReport]);
-
-  const handleAnalyzeTrend = async (itemId: string, query: string, category: string) => {
-    setAnalyzingIds((prev) => {
-      const next = new Set(prev);
-      next.add(itemId);
-      return next;
-    });
-
-    try {
-      const card = await JulesAgentService.createVerification(query, category);
-      setToastMessage(
-        `세션 ${card.sessionId} 카드가 생성되었습니다. 진행 상황을 실시간으로 추적합니다.`,
-      );
-      setSelectedCategory("Jules Analysis");
-      await loadVerificationCards();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setToastMessage(`분석 요청 실패: ${message}`);
-    } finally {
-      setAnalyzingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(itemId);
-        return next;
-      });
-    }
-  };
-
-  const handleAnalyze = (item: { id: string; keyword: string; category: string }) => {
-    if (analyzingIds.has(item.id)) {
-      return;
-    }
-    void handleAnalyzeTrend(item.id, item.keyword, item.category);
-  };
 
   const handleManualAnalyze = async (query: string) => {
     if (isCreatingManualVerification) {
@@ -358,8 +324,6 @@ export const TrendDashboard: React.FC = () => {
                 <TrendCard
                   key={item.id}
                   item={item}
-                  onAnalyze={handleAnalyze}
-                  isAnalyzing={analyzingIds.has(item.id)}
                 />
               ))
             )}
