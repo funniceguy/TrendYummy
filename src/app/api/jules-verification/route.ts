@@ -33,8 +33,12 @@ function canCreateNewCard(): boolean {
   if (stats.active >= MAX_VERIFICATION_SESSIONS) {
     return false;
   }
+
   const cards = getVerificationCards();
-  return cards.length < MAX_VERIFICATION_SESSIONS || stats.completed + stats.failed > 0;
+  return (
+    cards.length < MAX_VERIFICATION_SESSIONS ||
+    stats.completed + stats.failed > 0
+  );
 }
 
 /**
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const query = (body.query || "").trim();
-  const category = (body.category || "기타").trim();
+  const category = (body.category || "general").trim();
 
   if (!query) {
     return jsonError("query is required", 400);
@@ -74,7 +78,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   trimCardsToMax(MAX_VERIFICATION_SESSIONS);
   if (!canCreateNewCard()) {
     return jsonError(
-      `최대 동시 세션 수(${MAX_VERIFICATION_SESSIONS})에 도달했습니다.`,
+      `Max concurrent session limit reached (${MAX_VERIFICATION_SESSIONS}).`,
       409,
     );
   }
@@ -99,11 +103,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const hydratedCard = hydrateInitialCard(createdCard);
     upsertVerificationCard(hydratedCard);
 
-    const [refreshedCard] = await refreshVerificationCards([hydratedCard]);
-
     return NextResponse.json(
       {
-        card: refreshedCard,
+        card: hydratedCard,
         stats: getVerificationStats(),
       },
       { status: 201 },
