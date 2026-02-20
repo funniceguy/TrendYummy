@@ -146,6 +146,22 @@ chmod +x scripts/deploy-oci.sh scripts/health-check.sh
 NEXT_PUBLIC_BASE_PATH=/trendyummy APP_NAME=trendyummy ./scripts/deploy-oci.sh
 ```
 
+Enable continuous health monitoring (auto-restart on failure):
+
+```bash
+chmod +x scripts/health-monitor.sh
+NEXT_PUBLIC_BASE_PATH=/trendyummy APP_NAME=trendyummy ./scripts/health-monitor.sh
+```
+
+Recommended cron setup (every 5 minutes):
+
+```bash
+crontab -l > /tmp/current-cron 2>/dev/null || true
+echo "*/5 * * * * cd /opt/apps/trendyummy && NEXT_PUBLIC_BASE_PATH=/trendyummy APP_NAME=trendyummy BASE_URL=http://127.0.0.1 ./scripts/health-monitor.sh >> /home/ubuntu/trendyummy-health.log 2>&1" >> /tmp/current-cron
+crontab /tmp/current-cron
+rm -f /tmp/current-cron
+```
+
 Nginx reverse proxy example:
 
 ```nginx
