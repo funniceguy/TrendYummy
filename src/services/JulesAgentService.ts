@@ -20,6 +20,29 @@ export interface CrawlHealthCheck {
   message: string;
 }
 
+export interface CrawlerAnomaly {
+  id: string;
+  checkId: CrawlHealthCheck["id"];
+  severity: "warning" | "critical";
+  code:
+    | "HTTP_STATUS_ERROR"
+    | "PAYLOAD_NOT_SUCCESS"
+    | "LOW_ITEM_COUNT"
+    | "REQUEST_FAILED";
+  message: string;
+  recommendation: string;
+}
+
+export interface CrawlerHealthSnapshot {
+  checkedAt: string;
+  checks: CrawlHealthCheck[];
+  anomalies: CrawlerAnomaly[];
+  anomalyDetected: boolean;
+  summary: string;
+  passCount: number;
+  totalCount: number;
+}
+
 export interface VerificationActivity {
   id: string;
   type:
@@ -46,6 +69,8 @@ export interface JulesVerificationCard {
   crawlChecks: CrawlHealthCheck[];
   crawlVerified: boolean;
   crawlSummary: string;
+  anomalyDetected: boolean;
+  anomalies: CrawlerAnomaly[];
   activities: VerificationActivity[];
   reportMarkdown: string;
   reportSummary: string;
@@ -90,6 +115,7 @@ export interface DeepResearchResult {
   state: VerificationState;
   crawlChecks: CrawlHealthCheck[];
   crawlVerified: boolean;
+  anomalies: CrawlerAnomaly[];
 }
 
 interface ListVerificationResponse {
@@ -97,8 +123,17 @@ interface ListVerificationResponse {
   stats: VerificationStats;
 }
 
-interface CreateVerificationResponse {
+interface CreateVerificationCreatedResponse {
+  skipped?: false;
   card: JulesVerificationCard;
+  stats: VerificationStats;
+  health?: CrawlerHealthSnapshot;
+}
+
+interface CreateVerificationSkippedResponse {
+  skipped: true;
+  reason: string;
+  health: CrawlerHealthSnapshot;
   stats: VerificationStats;
 }
 
@@ -106,6 +141,20 @@ interface SingleVerificationResponse {
   card: JulesVerificationCard;
   stats: VerificationStats;
 }
+
+export type CreateVerificationResult =
+  | {
+      skipped: false;
+      card: JulesVerificationCard;
+      stats: VerificationStats;
+      health?: CrawlerHealthSnapshot;
+    }
+  | {
+      skipped: true;
+      reason: string;
+      health: CrawlerHealthSnapshot;
+      stats: VerificationStats;
+    };
 
 const DEFAULT_STATS: VerificationStats = {
   maxSessions: 15,
@@ -133,7 +182,7 @@ function wait(ms: number): Promise<void> {
 }
 
 function sanitizeMermaidLabel(input: string): string {
-  return input.replace(/["'[\](){}|<>]/g, "").slice(0, 28);
+  return input.replace(/["'[\](){}|<>]/g, "").slice(0, 30);
 }
 
 function buildVerificationMindmap(card: JulesVerificationCard): string {
@@ -143,16 +192,17 @@ function buildVerificationMindmap(card: JulesVerificationCard): string {
   lines.push(`Root --> State["State: ${sanitizeMermaidLabel(card.state)}"]`);
 
   card.crawlChecks.forEach((check, index) => {
-    const id = `C${index}`;
+    const nodeId = `C${index}`;
     const status = check.passed ? "PASS" : "FAIL";
-    lines.push(`Root --> ${id}["${sanitizeMermaidLabel(check.label)} ${status}"]`);
+    lines.push(
+      `Root --> ${nodeId}["${sanitizeMermaidLabel(check.label)} ${status}"]`,
+    );
   });
 
-  const recentActivities = card.activities.slice(0, 3);
-  recentActivities.forEach((activity, index) => {
-    const id = `A${index}`;
+  card.anomalies.slice(0, 3).forEach((anomaly, index) => {
+    const nodeId = `E${index}`;
     lines.push(
-      `Root --> ${id}["${sanitizeMermaidLabel(activity.type)}: ${sanitizeMermaidLabel(activity.message)}"]`,
+      `Root --> ${nodeId}["${sanitizeMermaidLabel(anomaly.checkId)} ${sanitizeMermaidLabel(anomaly.code)}"]`,
     );
   });
 
@@ -181,6 +231,7 @@ function toDeepResearchResult(card: JulesVerificationCard): DeepResearchResult {
     state: card.state,
     crawlChecks: card.crawlChecks,
     crawlVerified: card.crawlVerified,
+    anomalies: card.anomalies,
   };
 }
 
@@ -206,8 +257,9 @@ export const JulesAgentService = {
 
   async createVerification(
     query: string,
-    category: string = "기타",
-  ): Promise<JulesVerificationCard> {
+    category: string = "general",
+    options?: { force?: boolean },
+  ): Promise<CreateVerificationResult> {
     const response = await fetch(getApiPath("/api/jules-verification"), {
       method: "POST",
       headers: {
@@ -216,10 +268,11 @@ export const JulesAgentService = {
       body: JSON.stringify({
         query,
         category,
+        force: options?.force === true,
       }),
     });
 
-    if (!response.ok) {
+    if (!response.ok && response.status !== 202) {
       const body = (await response.json().catch(() => ({}))) as {
         error?: string;
         message?: string;
@@ -227,26 +280,41 @@ export const JulesAgentService = {
       throw new Error(body.error || body.message || "Failed to create verification");
     }
 
-    const data = (await response.json()) as CreateVerificationResponse;
+    if (response.status === 202) {
+      const skippedData =
+        (await response.json()) as CreateVerificationSkippedResponse;
+      this._cachedStats = skippedData.stats;
+      return {
+        skipped: true,
+        reason: skippedData.reason,
+        health: skippedData.health,
+        stats: skippedData.stats,
+      };
+    }
+
+    const data = (await response.json()) as CreateVerificationCreatedResponse;
     this._cachedStats = data.stats;
 
     const existingIndex = this._cachedCards.findIndex(
       (card) => card.sessionId === data.card.sessionId,
     );
     if (existingIndex >= 0) {
-      const next = [...this._cachedCards];
-      next[existingIndex] = data.card;
-      this._cachedCards = next;
+      const nextCards = [...this._cachedCards];
+      nextCards[existingIndex] = data.card;
+      this._cachedCards = nextCards;
     } else {
       this._cachedCards = [data.card, ...this._cachedCards];
     }
 
-    return data.card;
+    return {
+      skipped: false,
+      card: data.card,
+      stats: data.stats,
+      health: data.health,
+    };
   },
 
-  async getVerificationCard(
-    sessionId: string,
-  ): Promise<JulesVerificationCard> {
+  async getVerificationCard(sessionId: string): Promise<JulesVerificationCard> {
     const response = await fetch(
       getApiPath(`/api/jules-verification/${encodeURIComponent(sessionId)}`),
       {
@@ -261,18 +329,30 @@ export const JulesAgentService = {
 
     const data = (await response.json()) as SingleVerificationResponse;
     this._cachedStats = data.stats;
+
     const existingIndex = this._cachedCards.findIndex(
       (card) => card.sessionId === data.card.sessionId,
     );
     if (existingIndex >= 0) {
-      const next = [...this._cachedCards];
-      next[existingIndex] = data.card;
-      this._cachedCards = next;
+      const nextCards = [...this._cachedCards];
+      nextCards[existingIndex] = data.card;
+      this._cachedCards = nextCards;
     } else {
       this._cachedCards = [data.card, ...this._cachedCards];
     }
 
     return data.card;
+  },
+
+  async getCrawlerHealth(): Promise<CrawlerHealthSnapshot> {
+    const response = await fetch(getApiPath("/api/crawler-health"), {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load crawler health: ${response.status}`);
+    }
+    return (await response.json()) as CrawlerHealthSnapshot;
   },
 
   getAudioUrl(sessionId: string): string {
@@ -310,9 +390,16 @@ export const JulesAgentService = {
   async analyze(
     query: string,
     _type: "trend" | "manual" = "manual",
-    category: string = "기타",
+    category: string = "general",
   ): Promise<DeepResearchResult> {
-    const createdCard = await this.createVerification(query, category);
+    const created = await this.createVerification(query, category, {
+      force: true,
+    });
+    if (created.skipped) {
+      throw new Error(created.reason);
+    }
+
+    const createdCard = created.card;
     const startedAt = Date.now();
 
     while (Date.now() - startedAt <= ANALYZE_TIMEOUT_MS) {

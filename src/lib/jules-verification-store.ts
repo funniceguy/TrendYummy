@@ -30,6 +30,19 @@ export interface CrawlHealthCheck {
   message: string;
 }
 
+export interface CrawlerAnomaly {
+  id: string;
+  checkId: CrawlHealthCheck["id"];
+  severity: "warning" | "critical";
+  code:
+    | "HTTP_STATUS_ERROR"
+    | "PAYLOAD_NOT_SUCCESS"
+    | "LOW_ITEM_COUNT"
+    | "REQUEST_FAILED";
+  message: string;
+  recommendation: string;
+}
+
 export interface JulesVerificationCard {
   sessionId: string;
   query: string;
@@ -43,6 +56,8 @@ export interface JulesVerificationCard {
   crawlChecks: CrawlHealthCheck[];
   crawlVerified: boolean;
   crawlSummary: string;
+  anomalyDetected: boolean;
+  anomalies: CrawlerAnomaly[];
   activities: VerificationActivity[];
   reportMarkdown: string;
   reportSummary: string;
@@ -174,8 +189,10 @@ export function createVerificationCard(params: {
   category: string;
   crawlChecks: CrawlHealthCheck[];
   crawlSummary: string;
+  anomalies?: CrawlerAnomaly[];
 }): JulesVerificationCard {
   const { session, query, category, crawlChecks, crawlSummary } = params;
+  const anomalies = params.anomalies ?? [];
   const nowIso = new Date().toISOString();
   const sessionId = normalizeSessionId(session);
   const state = normalizeVerificationState(session.state);
@@ -193,6 +210,8 @@ export function createVerificationCard(params: {
     crawlChecks,
     crawlVerified: crawlChecks.every((check) => check.passed),
     crawlSummary,
+    anomalyDetected: anomalies.length > 0,
+    anomalies,
     activities: [],
     reportMarkdown: "",
     reportSummary: "",

@@ -5,7 +5,7 @@ import { JulesAgentService, type SessionStatus } from "@/services/JulesAgentServ
 interface JulesInputModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAnalyze: (query: string) => Promise<void> | void;
+  onAnalyze: (query: string, options?: { force?: boolean }) => Promise<void> | void;
 }
 
 const DEFAULT_STATUS: SessionStatus = {
@@ -25,6 +25,7 @@ export const JulesInputModal: React.FC<JulesInputModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>(DEFAULT_STATUS);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [forceAnalysis, setForceAnalysis] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -32,7 +33,6 @@ export const JulesInputModal: React.FC<JulesInputModalProps> = ({
     }
 
     let isMounted = true;
-
     const loadStatus = async () => {
       try {
         const status = await JulesAgentService.refreshSessionStatus();
@@ -69,18 +69,23 @@ export const JulesInputModal: React.FC<JulesInputModalProps> = ({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextQuery = query.trim();
-    if (!nextQuery || isProcessing || isSystemBusy) {
+    if (!nextQuery || isProcessing) {
+      return;
+    }
+
+    if (isSystemBusy && forceAnalysis) {
       return;
     }
 
     setIsProcessing(true);
     try {
-      await onAnalyze(nextQuery);
+      await onAnalyze(nextQuery, { force: forceAnalysis });
       setQuery("");
+      setForceAnalysis(false);
       onClose();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      alert(`요청 처리 실패: ${message}`);
+      alert(`Request failed: ${message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -92,7 +97,7 @@ export const JulesInputModal: React.FC<JulesInputModalProps> = ({
         <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-6">
           <h3 className="flex items-center gap-2 text-xl font-bold text-neon-magenta">
             <Bot className="h-6 w-6" />
-            Jules 검증 요청
+            Jules verification request
           </h3>
 
           <div className="flex items-center gap-3">
@@ -122,39 +127,33 @@ export const JulesInputModal: React.FC<JulesInputModalProps> = ({
           {isProcessing ? (
             <div className="py-8 text-center">
               <BrainCircuit className="mx-auto mb-4 h-16 w-16 animate-pulse text-neon-magenta" />
-              <h4 className="mb-2 text-lg font-bold text-white">검증 세션 생성 중...</h4>
+              <h4 className="mb-2 text-lg font-bold text-white">
+                Processing verification request...
+              </h4>
               <p className="text-sm text-gray-400">
-                분석 카드가 생성되며 진행 상태가 실시간으로 업데이트됩니다.
+                Lightweight checks run first. Jules starts only when anomaly is detected
+                or when force mode is enabled.
               </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
               <label className="mb-3 ml-1 block text-sm font-semibold text-gray-300">
-                분석 요청
+                Request
               </label>
               <div className="relative">
                 <input
                   type="text"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder={
-                    isSystemBusy
-                      ? "현재 모든 Jules 세션이 사용 중입니다."
-                      : "예: 연예 카테고리 크롤링 안정성 심층 검증"
-                  }
-                  className={`w-full rounded-xl border bg-black/40 py-4 pl-5 pr-12 text-lg text-white outline-none transition-all ${
-                    isSystemBusy
-                      ? "cursor-not-allowed border-red-500/50 opacity-60"
-                      : "border-white/20 focus:border-neon-magenta focus:ring-1 focus:ring-neon-magenta"
-                  }`}
-                  autoFocus={!isSystemBusy}
-                  disabled={isSystemBusy}
+                  placeholder="Example: Verify crawler reliability for entertainment category"
+                  className="w-full rounded-xl border border-white/20 bg-black/40 py-4 pl-5 pr-12 text-lg text-white outline-none transition-all focus:border-neon-magenta focus:ring-1 focus:ring-neon-magenta"
+                  autoFocus
                 />
                 <button
                   type="submit"
-                  disabled={isSystemBusy || !query.trim()}
+                  disabled={!query.trim() || (isSystemBusy && forceAnalysis)}
                   className={`absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-white transition-all ${
-                    isSystemBusy
+                    !query.trim() || (isSystemBusy && forceAnalysis)
                       ? "cursor-not-allowed bg-gray-600"
                       : "bg-neon-magenta hover:bg-neon-magenta/80"
                   }`}
@@ -163,12 +162,23 @@ export const JulesInputModal: React.FC<JulesInputModalProps> = ({
                 </button>
               </div>
 
+              <label className="mt-4 flex cursor-pointer items-center gap-2 text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-neon-magenta"
+                  checked={forceAnalysis}
+                  onChange={(event) => setForceAnalysis(event.target.checked)}
+                />
+                Force Jules deep analysis even when no anomaly is detected
+              </label>
+
               <div className="mt-4 text-xs">
                 {statusError ? (
-                  <p className="text-red-300">세션 상태 조회 실패: {statusError}</p>
+                  <p className="text-red-300">Session status load failed: {statusError}</p>
                 ) : (
                   <p className="text-gray-500">
-                    새 요청 시 세션 ID 기준 분석 카드가 생성되고, 크롤링 검증 결과와 진행 상태가 자동 업데이트됩니다.
+                    Recommended default: keep force mode off. This avoids unnecessary Jules
+                    sessions when crawler checks are healthy.
                   </p>
                 )}
               </div>

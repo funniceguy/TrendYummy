@@ -1,5 +1,12 @@
 import React from "react";
-import { Bot, FileText, Headphones, Link as LinkIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  FileText,
+  Headphones,
+  Link as LinkIcon,
+  ShieldCheck,
+} from "lucide-react";
 import {
   JulesAgentService,
   type JulesVerificationCard,
@@ -104,6 +111,21 @@ export const JulesCard: React.FC<JulesCardProps> = ({ card, onOpenReport }) => {
           <span className={card.crawlVerified ? "text-emerald-300" : "text-yellow-300"}>
             {card.crawlSummary}
           </span>
+        </p>
+        <p className="flex items-center gap-1">
+          {card.anomalyDetected ? (
+            <>
+              <AlertTriangle className="h-3.5 w-3.5 text-red-300" />
+              <span className="text-red-300">
+                이상 징후 {card.anomalies.length}건
+              </span>
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" />
+              <span className="text-emerald-300">이상 징후 없음</span>
+            </>
+          )}
         </p>
       </div>
 

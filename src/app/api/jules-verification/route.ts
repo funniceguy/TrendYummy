@@ -22,6 +22,7 @@ export const maxDuration = 60;
 interface CreateVerificationBody {
   query?: string;
   category?: string;
+  force?: boolean;
 }
 
 function jsonError(message: string, status: number): NextResponse {
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const query = (body.query || "").trim();
   const category = (body.category || "general").trim();
+  const force = body.force === true;
 
   if (!query) {
     return jsonError("query is required", 400);
@@ -84,12 +86,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const { checks, summary } = await runCrawlerHealthChecks(request);
+    const healthSnapshot = await runCrawlerHealthChecks(request);
+    const { checks, summary } = healthSnapshot;
+
+    if (!force && !healthSnapshot.anomalyDetected) {
+      return NextResponse.json(
+        {
+          skipped: true,
+          reason:
+            "No crawler anomaly detected. Jules deep verification was not triggered.",
+          health: healthSnapshot,
+          stats: getVerificationStats(),
+        },
+        { status: 202 },
+      );
+    }
+
     const session = await createVerificationSession({
       request,
       query,
       category,
       crawlChecks: checks,
+      anomalies: healthSnapshot.anomalies,
     });
 
     const createdCard = createVerificationCard({
@@ -98,6 +116,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       category,
       crawlChecks: checks,
       crawlSummary: summary,
+      anomalies: healthSnapshot.anomalies,
     });
 
     const hydratedCard = hydrateInitialCard(createdCard);
@@ -107,6 +126,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       {
         card: hydratedCard,
         stats: getVerificationStats(),
+        health: healthSnapshot,
       },
       { status: 201 },
     );

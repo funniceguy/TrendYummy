@@ -1,5 +1,6 @@
 import { julesApi } from "@/lib/api/jules-client";
 import {
+  type CrawlerAnomaly,
   type CrawlHealthCheck,
   type JulesVerificationCard,
   normalizeVerificationState,
@@ -14,13 +15,24 @@ interface InternalCrawlCheckConfig {
   id: CrawlHealthCheck["id"];
   label: string;
   endpoint: string;
+  minItemCount: number;
 }
 
 const CRAWL_CHECKS: InternalCrawlCheckConfig[] = [
-  { id: "trends", label: "Trends crawler", endpoint: "/api/trends" },
-  { id: "youtube", label: "YouTube crawler", endpoint: "/api/youtube" },
-  { id: "humor", label: "Humor crawler", endpoint: "/api/humor" },
+  { id: "trends", label: "Trends crawler", endpoint: "/api/trends", minItemCount: 20 },
+  { id: "youtube", label: "YouTube crawler", endpoint: "/api/youtube", minItemCount: 5 },
+  { id: "humor", label: "Humor crawler", endpoint: "/api/humor", minItemCount: 5 },
 ];
+
+export interface CrawlerHealthSnapshot {
+  checkedAt: string;
+  checks: CrawlHealthCheck[];
+  anomalies: CrawlerAnomaly[];
+  anomalyDetected: boolean;
+  summary: string;
+  passCount: number;
+  totalCount: number;
+}
 
 function normalizeBasePath(value: string | undefined): string {
   if (!value) {
@@ -111,13 +123,32 @@ function countByCheckId(id: CrawlHealthCheck["id"], payload: unknown): number {
   return countHumor(payload);
 }
 
+function createAnomaly(params: {
+  checkId: CrawlHealthCheck["id"];
+  severity: "warning" | "critical";
+  code: CrawlerAnomaly["code"];
+  message: string;
+  recommendation: string;
+}): CrawlerAnomaly {
+  const { checkId, severity, code, message, recommendation } = params;
+  return {
+    id: `${checkId}-${code}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+    checkId,
+    severity,
+    code,
+    message,
+    recommendation,
+  };
+}
+
 export async function runCrawlerHealthChecks(
   request: Request,
-): Promise<{ checks: CrawlHealthCheck[]; summary: string }> {
+): Promise<CrawlerHealthSnapshot> {
   const checks: CrawlHealthCheck[] = [];
+  const anomalies: CrawlerAnomaly[] = [];
+  const checkedAt = new Date().toISOString();
 
   for (const config of CRAWL_CHECKS) {
-    const checkedAt = new Date().toISOString();
     const endpointUrl = buildInternalApiUrl(request, config.endpoint);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -139,7 +170,44 @@ export async function runCrawlerHealthChecks(
 
       const itemCount = countByCheckId(config.id, payload);
       const success = isSuccessPayload(payload);
-      const passed = response.ok && success && itemCount > 0;
+      const passed =
+        response.ok && success && itemCount >= config.minItemCount;
+
+      if (!response.ok) {
+        anomalies.push(
+          createAnomaly({
+            checkId: config.id,
+            severity: "critical",
+            code: "HTTP_STATUS_ERROR",
+            message: `${config.label} returned HTTP ${response.status}`,
+            recommendation: `Check upstream source and network policy for ${config.endpoint}`,
+          }),
+        );
+      }
+
+      if (!success) {
+        anomalies.push(
+          createAnomaly({
+            checkId: config.id,
+            severity: "warning",
+            code: "PAYLOAD_NOT_SUCCESS",
+            message: `${config.label} returned success=false payload`,
+            recommendation: "Review parser changes or fallback logic.",
+          }),
+        );
+      }
+
+      if (itemCount < config.minItemCount) {
+        anomalies.push(
+          createAnomaly({
+            checkId: config.id,
+            severity: "warning",
+            code: "LOW_ITEM_COUNT",
+            message: `${config.label} item count is low (${itemCount}/${config.minItemCount})`,
+            recommendation: "Inspect selector changes and source structure drift.",
+          }),
+        );
+      }
 
       checks.push({
         id: config.id,
@@ -156,6 +224,15 @@ export async function runCrawlerHealthChecks(
     } catch (error) {
       clearTimeout(timeoutId);
       const message = error instanceof Error ? error.message : "unknown error";
+      anomalies.push(
+        createAnomaly({
+          checkId: config.id,
+          severity: "critical",
+          code: "REQUEST_FAILED",
+          message: `${config.label} request failed: ${message}`,
+          recommendation: "Validate DNS, outbound network, and remote source availability.",
+        }),
+      );
       checks.push({
         id: config.id,
         label: config.label,
@@ -170,9 +247,19 @@ export async function runCrawlerHealthChecks(
   }
 
   const passCount = checks.filter((check) => check.passed).length;
+  const summary =
+    anomalies.length === 0
+      ? `All crawler checks healthy (${passCount}/${checks.length})`
+      : `Detected ${anomalies.length} anomalies (${passCount}/${checks.length} healthy)`;
+
   return {
+    checkedAt,
     checks,
-    summary: `Crawler health ${passCount}/${checks.length} passed`,
+    anomalies,
+    anomalyDetected: anomalies.length > 0,
+    summary,
+    passCount,
+    totalCount: checks.length,
   };
 }
 
@@ -180,8 +267,9 @@ function buildPrompt(params: {
   query: string;
   category: string;
   crawlChecks: CrawlHealthCheck[];
+  anomalies: CrawlerAnomaly[];
 }): string {
-  const { query, category, crawlChecks } = params;
+  const { query, category, crawlChecks, anomalies } = params;
   const crawlContext = crawlChecks
     .map(
       (check) =>
@@ -189,12 +277,25 @@ function buildPrompt(params: {
     )
     .join("\n");
 
+  const anomalyContext =
+    anomalies.length > 0
+      ? anomalies
+          .map(
+            (anomaly) =>
+              `- [${anomaly.severity.toUpperCase()}] ${anomaly.checkId}/${anomaly.code}: ${anomaly.message} | action: ${anomaly.recommendation}`,
+          )
+          .join("\n")
+      : "- No anomalies detected. Analyze residual risks and blind spots.";
+
   return [
     `You are Jules. Perform a deep verification analysis for "${query}".`,
     `Category: ${category}`,
     "",
     "System crawler health checks:",
     crawlContext,
+    "",
+    "Detected anomalies:",
+    anomalyContext,
     "",
     "Required output:",
     "1) Explain health of each crawler endpoint.",
@@ -217,7 +318,10 @@ function normalizeSessionId(session: Session): string {
 
 function buildCardSummary(card: JulesVerificationCard): string {
   const passCount = card.crawlChecks.filter((check) => check.passed).length;
-  return `${card.query}. ${card.crawlSummary}. Session state is ${stateToLabel(
+  const anomalyPart = card.anomalyDetected
+    ? `Anomalies detected: ${card.anomalies.length}.`
+    : "No anomaly detected.";
+  return `${card.query}. ${card.crawlSummary}. ${anomalyPart} Session state is ${stateToLabel(
     card.state,
   )}. Passed checks ${passCount}/${card.crawlChecks.length}.`;
 }
@@ -241,6 +345,16 @@ function buildCardReport(card: JulesVerificationCard): string {
           .join("\n")
       : "- No activity log yet.";
 
+  const anomalyLines =
+    card.anomalies.length > 0
+      ? card.anomalies
+          .map(
+            (anomaly) =>
+              `- [${anomaly.severity.toUpperCase()}] ${anomaly.checkId}/${anomaly.code}: ${anomaly.message} -> ${anomaly.recommendation}`,
+          )
+          .join("\n")
+      : "- No anomaly detected.";
+
   return [
     "# Jules Verification Report",
     "",
@@ -256,7 +370,10 @@ function buildCardReport(card: JulesVerificationCard): string {
     "## 2) Jules progress logs",
     activityLines,
     "",
-    "## 3) Operational summary",
+    "## 3) Detected anomalies",
+    anomalyLines,
+    "",
+    "## 4) Operational summary",
     `- ${card.crawlSummary}`,
     `- Current session state: ${stateToLabel(card.state)}`,
     `- Latest message: ${card.statusMessage}`,
@@ -295,6 +412,7 @@ export async function createVerificationSession(params: {
   query: string;
   category: string;
   crawlChecks: CrawlHealthCheck[];
+  anomalies: CrawlerAnomaly[];
 }): Promise<Session> {
   const source =
     process.env.JULES_SOURCE_CONTEXT || "sources/github/funniceguy/TrendYummy";
@@ -303,6 +421,7 @@ export async function createVerificationSession(params: {
     query: params.query,
     category: params.category,
     crawlChecks: params.crawlChecks,
+    anomalies: params.anomalies,
   });
 
   const session = await julesApi.createSession({

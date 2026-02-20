@@ -5,6 +5,7 @@ import Link from "next/link";
 import mermaid from "mermaid";
 import {
   Activity,
+  AlertTriangle,
   Bot,
   BrainCircuit,
   FileText,
@@ -12,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Settings,
+  ShieldCheck,
   Volume2,
   X,
   Zap,
@@ -22,6 +24,7 @@ import { JulesCard } from "../Jules/JulesCard";
 import { JulesInputModal } from "../Jules/JulesInputModal";
 import {
   JulesAgentService,
+  type CrawlerHealthSnapshot,
   type DeepResearchResult,
   type JulesVerificationCard,
   type SessionStatus,
@@ -45,12 +48,16 @@ export const TrendDashboard: React.FC = () => {
     setSelectedCategory,
   } = useTrendStore();
 
-  const [verificationCards, setVerificationCards] = useState<JulesVerificationCard[]>([]);
+  const [verificationCards, setVerificationCards] = useState<
+    JulesVerificationCard[]
+  >([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>(DEFAULT_STATUS);
+  const [crawlerHealth, setCrawlerHealth] = useState<CrawlerHealthSnapshot | null>(
+    null,
+  );
   const [isCreatingManualVerification, setIsCreatingManualVerification] =
     useState(false);
-  const [isRefreshingVerificationCards, setIsRefreshingVerificationCards] =
-    useState(false);
+  const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
   const [selectedReport, setSelectedReport] = useState<DeepResearchResult | null>(
     null,
   );
@@ -69,16 +76,20 @@ export const TrendDashboard: React.FC = () => {
   const showBusyBadge =
     isLoading || isCreatingManualVerification || sessionStatus.active > 0;
 
-  const loadVerificationCards = useCallback(async () => {
-    setIsRefreshingVerificationCards(true);
+  const loadDashboardData = useCallback(async () => {
+    setIsRefreshingDashboard(true);
     try {
-      const data = await JulesAgentService.listVerificationCards();
-      setVerificationCards(data.cards);
+      const [verificationData, healthSnapshot] = await Promise.all([
+        JulesAgentService.listVerificationCards(),
+        JulesAgentService.getCrawlerHealth(),
+      ]);
+      setVerificationCards(verificationData.cards);
       setSessionStatus(JulesAgentService.getSessionStatus());
+      setCrawlerHealth(healthSnapshot);
     } catch (error) {
-      console.error("Failed to load verification cards:", error);
+      console.error("Failed to load dashboard data:", error);
     } finally {
-      setIsRefreshingVerificationCards(false);
+      setIsRefreshingDashboard(false);
     }
   }, []);
 
@@ -87,17 +98,16 @@ export const TrendDashboard: React.FC = () => {
     const interval = setInterval(() => {
       void fetchTrends();
     }, settings.refreshInterval * 60 * 1000);
-
     return () => clearInterval(interval);
   }, [fetchTrends, settings.refreshInterval]);
 
   useEffect(() => {
-    void loadVerificationCards();
+    void loadDashboardData();
     const interval = setInterval(() => {
-      void loadVerificationCards();
-    }, 4000);
+      void loadDashboardData();
+    }, 5000);
     return () => clearInterval(interval);
-  }, [loadVerificationCards]);
+  }, [loadDashboardData]);
 
   useEffect(() => {
     if (!toastMessage) {
@@ -105,7 +115,7 @@ export const TrendDashboard: React.FC = () => {
     }
     const timeoutId = setTimeout(() => {
       setToastMessage(null);
-    }, 4000);
+    }, 4500);
     return () => clearTimeout(timeoutId);
   }, [toastMessage]);
 
@@ -126,21 +136,37 @@ export const TrendDashboard: React.FC = () => {
     }, 100);
   }, [selectedReport]);
 
-  const handleManualAnalyze = async (query: string) => {
+  const handleManualAnalyze = async (
+    query: string,
+    options?: { force?: boolean },
+  ) => {
     if (isCreatingManualVerification) {
       return;
     }
     setIsCreatingManualVerification(true);
     try {
-      const card = await JulesAgentService.createVerification(query, "manual");
+      const result = await JulesAgentService.createVerification(
+        query,
+        "manual",
+        options,
+      );
+
+      if (result.skipped) {
+        setCrawlerHealth(result.health);
+        setToastMessage(
+          `${result.reason} (${result.health.summary})`,
+        );
+        return;
+      }
+
       setToastMessage(
-        `수동 검증 요청 접수 완료: ${card.sessionId}. 카드에서 진행 상황을 확인하세요.`,
+        `Verification card created: ${result.card.sessionId}.`,
       );
       setSelectedCategory("Jules Analysis");
-      await loadVerificationCards();
+      await loadDashboardData();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setToastMessage(`수동 요청 실패: ${message}`);
+      setToastMessage(`Verification request failed: ${message}`);
     } finally {
       setIsCreatingManualVerification(false);
     }
@@ -177,7 +203,7 @@ export const TrendDashboard: React.FC = () => {
                 : "text-gray-400 hover:bg-white/5 hover:text-white"
             }`}
           >
-            전체 보기
+            All trends
           </button>
 
           {settings.categories.map((category) => (
@@ -213,9 +239,9 @@ export const TrendDashboard: React.FC = () => {
             </button>
             <button
               onClick={() => setIsJulesModalOpen(true)}
-              disabled={isCreatingManualVerification || sessionStatus.available <= 0}
+              disabled={isCreatingManualVerification}
               className="rounded-xl border border-neon-magenta/30 bg-neon-magenta/10 p-3 text-neon-magenta transition-all hover:scale-105 hover:bg-neon-magenta/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-              title="새 검증 요청"
+              title="New verification request"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -223,10 +249,42 @@ export const TrendDashboard: React.FC = () => {
 
           <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-gray-300">
             <p>
-              세션 사용량: {sessionStatus.active}/{sessionStatus.total}
+              Session usage: {sessionStatus.active}/{sessionStatus.total}
             </p>
-            <p>가용 세션: {sessionStatus.available}</p>
-            <p>생성 카드: {verificationCards.length}</p>
+            <p>Available sessions: {sessionStatus.available}</p>
+            <p>Verification cards: {verificationCards.length}</p>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-gray-300">
+            <p className="mb-1 flex items-center gap-2">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" />
+              Lightweight crawler checks
+            </p>
+            {crawlerHealth ? (
+              <>
+                <p>
+                  {crawlerHealth.summary}
+                </p>
+                <p>
+                  Pass: {crawlerHealth.passCount}/{crawlerHealth.totalCount}
+                </p>
+                <p className="flex items-center gap-1">
+                  {crawlerHealth.anomalyDetected ? (
+                    <>
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-300" />
+                      Anomalies: {crawlerHealth.anomalies.length}
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" />
+                      No anomaly
+                    </>
+                  )}
+                </p>
+              </>
+            ) : (
+              <p>Checking...</p>
+            )}
           </div>
         </nav>
 
@@ -236,7 +294,7 @@ export const TrendDashboard: React.FC = () => {
             className="group flex items-center gap-3 rounded-lg border border-transparent p-3 text-gray-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-white"
           >
             <Settings className="h-5 w-5 transition-colors group-hover:text-neon-cyan" />
-            <span className="text-sm font-medium">설정</span>
+            <span className="text-sm font-medium">Settings</span>
           </Link>
         </div>
       </aside>
@@ -249,14 +307,16 @@ export const TrendDashboard: React.FC = () => {
             ) : (
               <Hash className="h-5 w-5 text-gray-400" />
             )}
-            {isJulesCategory ? "Jules Verification Dashboard" : `${selectedCategory} 대시보드`}
+            {isJulesCategory
+              ? "Jules Verification Dashboard"
+              : `${selectedCategory} Dashboard`}
           </h2>
 
           <div className="flex items-center gap-4">
             <span className="text-xs text-gray-500">
               {isJulesCategory
-                ? `검증 카드 ${verificationCards.length}개`
-                : "트렌드 자동 업데이트 활성"}
+                ? `Cards ${verificationCards.length}`
+                : "Auto trend updates"}
             </span>
             <span
               className={`rounded-full border px-2 py-1 text-xs ${
@@ -266,25 +326,25 @@ export const TrendDashboard: React.FC = () => {
               }`}
             >
               {isLoading
-                ? "트렌드 수집 중..."
+                ? "Crawling..."
                 : isCreatingManualVerification
-                  ? "세션 생성 중..."
+                  ? "Creating session..."
                   : sessionStatus.active > 0
-                    ? `Jules 진행 중 (${sessionStatus.active})`
-                    : "대기"}
+                    ? `Jules running (${sessionStatus.active})`
+                    : "Idle"}
             </span>
             <button
               onClick={() => {
                 void fetchTrends();
-                void loadVerificationCards();
+                void loadDashboardData();
               }}
-              disabled={isLoading || isRefreshingVerificationCards}
+              disabled={isLoading || isRefreshingDashboard}
               className="rounded-full p-2 text-neon-cyan transition-colors duration-700 hover:rotate-180 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:rotate-0"
-              title="새로고침"
+              title="Refresh"
             >
               <RefreshCw
                 className={`h-5 w-5 ${
-                  isLoading || isRefreshingVerificationCards ? "animate-spin" : ""
+                  isLoading || isRefreshingDashboard ? "animate-spin" : ""
                 }`}
               />
             </button>
@@ -297,12 +357,12 @@ export const TrendDashboard: React.FC = () => {
               verificationCards.length === 0 ? (
                 <div className="col-span-full flex flex-col items-center py-20 text-center text-gray-500">
                   <Bot className="mb-4 h-12 w-12 text-neon-magenta/40" />
-                  <p>아직 생성된 Jules 검증 카드가 없습니다.</p>
+                  <p>No Jules verification cards yet.</p>
                   <button
                     onClick={() => setIsJulesModalOpen(true)}
                     className="mt-4 rounded-lg bg-neon-magenta/20 px-4 py-2 text-sm font-bold text-neon-magenta transition hover:bg-neon-magenta/30"
                   >
-                    + 첫 검증 요청하기
+                    + Create first verification
                   </button>
                 </div>
               ) : (
@@ -317,15 +377,10 @@ export const TrendDashboard: React.FC = () => {
             ) : filteredTrends.length === 0 && !isLoading ? (
               <div className="col-span-full flex flex-col items-center py-20 text-center text-gray-500">
                 <Zap className="mb-4 h-12 w-12 opacity-20" />
-                <p>트렌드 데이터가 없습니다. 새로고침을 시도해 주세요.</p>
+                <p>No trend data available. Try refresh.</p>
               </div>
             ) : (
-              filteredTrends.map((item) => (
-                <TrendCard
-                  key={item.id}
-                  item={item}
-                />
-              ))
+              filteredTrends.map((item) => <TrendCard key={item.id} item={item} />)
             )}
           </div>
         </div>
@@ -336,7 +391,7 @@ export const TrendDashboard: React.FC = () => {
               <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-6">
                 <h3 className="flex items-center gap-2 text-2xl font-bold text-neon-magenta">
                   <BrainCircuit className="h-6 w-6" />
-                  Jules 검증 리포트
+                  Jules verification report
                 </h3>
                 <button
                   onClick={() => setSelectedReport(null)}
@@ -355,13 +410,13 @@ export const TrendDashboard: React.FC = () => {
                 <div className="flex w-1/2 flex-col bg-black/20 p-8">
                   <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-neon-lime">
                     <Activity className="h-5 w-5" />
-                    Verification Graph
+                    Verification graph
                   </h3>
                   <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/5">
                     {selectedReport.visualContent ? (
                       <div className="mermaid">{selectedReport.visualContent.content}</div>
                     ) : (
-                      <div className="text-gray-500">시각화 데이터가 없습니다.</div>
+                      <div className="text-gray-500">No visualization data.</div>
                     )}
                   </div>
                 </div>
@@ -370,11 +425,17 @@ export const TrendDashboard: React.FC = () => {
               <div className="flex items-center justify-between border-t border-white/10 bg-black/20 px-8 py-4 text-xs text-gray-400">
                 <div className="flex items-center gap-4">
                   <span>Session ID: {selectedReport.sessionId}</span>
-                  <span>상태: {selectedReport.state}</span>
-                  <span>크롤링 검증: {selectedReport.crawlVerified ? "정상" : "확인 필요"}</span>
+                  <span>State: {selectedReport.state}</span>
+                  <span>
+                    Anomalies: {selectedReport.anomalies.length}
+                  </span>
+                  <span>
+                    Crawler checks:{" "}
+                    {selectedReport.crawlVerified ? "healthy" : "needs review"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span>분석 시간: {selectedReport.analysisTime}초</span>
+                  <span>Elapsed: {selectedReport.analysisTime}s</span>
                   <a
                     href={JulesAgentService.getAudioUrl(selectedReport.sessionId)}
                     target="_blank"
@@ -382,14 +443,14 @@ export const TrendDashboard: React.FC = () => {
                     className="inline-flex items-center gap-1 rounded-md border border-neon-cyan/40 bg-neon-cyan/10 px-2 py-1 font-semibold text-neon-cyan transition hover:bg-neon-cyan/20"
                   >
                     <Volume2 className="h-3 w-3" />
-                    음성 파일
+                    Audio
                   </a>
                   <button
                     onClick={() => setSelectedReport(null)}
                     className="inline-flex items-center gap-1 rounded-md border border-neon-magenta/40 bg-neon-magenta/10 px-2 py-1 font-semibold text-neon-magenta transition hover:bg-neon-magenta/20"
                   >
                     <FileText className="h-3 w-3" />
-                    닫기
+                    Close
                   </button>
                 </div>
               </div>
